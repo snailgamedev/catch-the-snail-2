@@ -4055,14 +4055,23 @@ function drawBackground() {
   }
 }
 
-// ============ MULTIPLAYER GAMEPLAY ============
+
+// ============ MULTIPLAYER GAMEPLAY (REBUILT FROM SCRATCH) ============
+// Rule #1: CPU snails use EXACT singleplayer code — updateSnail() and drawSnailAt()
+// Rule #2: Timer ticks down properly on ALL clients
+// Rule #3: Clean HUD — timer top center, catcher level top left, ability bottom left
+// Rule #4: Full cutscenes with freeze for CPU snail football moves
+
 let mpMode = false;
-let mpRole = ''; // 'catcher' or 'snail'
+let mpRole = ''; // 'catcher' | 'snail' | 'spectator'
 let mpRoundNum = 0;
 let mpTotalRounds = 3;
+let mpTimer = 60;
+let mpHeadStart = 0;
+let mpRoundEnding = false;
+let mpFadeAlpha = 0;
 let mpRemoteSnails = {};
 let mpRemoteCursor = { x: 400, y: 300 };
-let mpTimer = 60;
 let mpMySnailData = null;
 let mpGameRef = null;
 let mpListeners = [];
@@ -4070,10 +4079,30 @@ let mpTimerInterval = null;
 let mpScores = {};
 let mpLobbyData = null;
 let mpMoveCooldown = 0;
-let mpCpuSnails = []; // host-managed CPU snails
+let mpAbilityCooldown = 0;
 let mpSyncCounter = 0;
-let mpHeadStart = 0; // frames of head start remaining (snails move, catcher frozen)
+let mpCpuSnailObjects = []; // actual snail objects for CPU snails — same as singleplayer
 
+// CPU Catcher difficulty levels
+const cpuCatcherLevels = [
+  { name: 'SLEEPY',     speed: 1.5, wobble: 60, reactionDelay: 30, switchDelay: 120, color: '#88ddff' },
+  { name: 'LAZY',       speed: 2.0, wobble: 45, reactionDelay: 20, switchDelay: 90,  color: '#44cc44' },
+  { name: 'CASUAL',     speed: 2.5, wobble: 35, reactionDelay: 15, switchDelay: 70,  color: '#cccc44' },
+  { name: 'FOCUSED',    speed: 3.0, wobble: 25, reactionDelay: 10, switchDelay: 50,  color: '#ff8844' },
+  { name: 'AGGRESSIVE', speed: 3.5, wobble: 18, reactionDelay: 6,  switchDelay: 35,  color: '#ff4444' },
+  { name: 'RELENTLESS', speed: 4.0, wobble: 12, reactionDelay: 3,  switchDelay: 20,  color: '#dd2222' },
+  { name: 'PREDATOR',   speed: 4.5, wobble: 8,  reactionDelay: 1,  switchDelay: 10,  color: '#cc00cc' },
+  { name: 'TERMINATOR', speed: 5.5, wobble: 4,  reactionDelay: 0,  switchDelay: 5,   color: '#ff00ff' },
+];
+let cpuCatcherTarget = null;
+let cpuCatcherReactionTimer = 0;
+let cpuCatcherSwitchTimer = 0;
+
+function getCpuCatcherLevel() {
+  return Math.min(7, Math.floor(difficulty * 8 / 12));
+}
+
+// ===== START MULTIPLAYER GAME =====
 function startMultiplayerGame(lobbyData) {
   mpLobbyData = lobbyData;
   mpMode = true;
@@ -4081,7 +4110,7 @@ function startMultiplayerGame(lobbyData) {
   mpTotalRounds = lobbyData.settings?.rounds || 3;
   mpScores = {};
   const noopRef = { set(){}, update(){}, on(){return()=>{}}, off(){}, once(){}, child(){ return noopRef; } };
-  mpGameRef = fbDB ? fbDB.ref(`lobbies/${mpLobbyId}/game`) : noopRef;
+  mpGameRef = fbDB ? fbDB.ref('lobbies/' + mpLobbyId + '/game') : noopRef;
 
   // Hide menus and singleplayer HUD
   document.getElementById('main-menu').style.display = 'none';
@@ -4091,25 +4120,32 @@ function startMultiplayerGame(lobbyData) {
   gameStarted = true;
   paused = false;
 
-  initMultiplayerRound();
+  initMPRound();
 }
 
-function initMultiplayerRound() {
+// ===== INIT A ROUND =====
+function initMPRound() {
   mpRoundNum++;
+  mpCpuSnailObjects = [];
   mpRemoteSnails = {};
   mpRemoteCursor = { x: canvas.width / 2, y: canvas.height / 2 };
-  mpCpuSnails = [];
   mpMoveCooldown = 0;
-  mpHeadStart = 300; // 5 seconds at 60fps — snails get a head start
+  mpAbilityCooldown = 0;
+  mpRoundEnding = false;
+  mpFadeAlpha = 0;
+  mpHeadStart = 300; // 5 second head start
+  cpuCatcherTarget = null;
+  cpuCatcherReactionTimer = 0;
+  cpuCatcherSwitchTimer = 0;
 
   const settings = mpLobbyData.settings || {};
   mpTimer = settings.timeLimit || 60;
 
-  // Determine difficulty — set the global so football move chances work
+  // Set difficulty
   let diff = settings.difficulty;
   if (diff === 'random') diff = Math.floor(Math.random() * diffLevels.length);
   else diff = parseInt(diff) || 0;
-  difficulty = diff; // set global difficulty for football move chances
+  difficulty = diff;
 
   // Determine catcher
   const players = mpLobbyData.players || {};
@@ -4119,20 +4155,25 @@ function initMultiplayerRound() {
 
   if (cpuCatcher) {
     catcherUid = 'CPU';
-    mpRole = 'snail'; // all humans are snails
+    mpRole = 'snail';
   } else if (settings.roles === 'random') {
     catcherUid = uids[Math.floor(Math.random() * uids.length)];
-    mpRole = catcherUid === fbUser.uid ? 'catcher' : 'snail';
+    mpRole = (fbUser && catcherUid === fbUser.uid) ? 'catcher' : 'snail';
   } else if (settings.roles === 'rotate') {
     catcherUid = uids[(mpRoundNum - 1) % uids.length];
-    mpRole = catcherUid === fbUser.uid ? 'catcher' : 'snail';
+    mpRole = (fbUser && catcherUid === fbUser.uid) ? 'catcher' : 'snail';
   } else {
     catcherUid = mpLobbyData.host;
-    mpRole = catcherUid === fbUser.uid ? 'catcher' : 'snail';
+    mpRole = (fbUser && catcherUid === fbUser.uid) ? 'catcher' : 'snail';
   }
 
   if (mpIsHost) {
-    // Host sets up round
+    // Create CPU snails using singleplayer spawn system
+    const snailUids = cpuCatcher ? uids : uids.filter(u => u !== catcherUid);
+    const cpuCount = Math.max(0, (settings.maxPlayers || 5) - uids.length);
+    const totalSnailCount = snailUids.length + (settings.cpuFill === 'on' ? cpuCount : 0);
+    const picks = pickSnailsForWave(totalSnailCount);
+
     const gameState = {
       round: mpRoundNum,
       state: 'playing',
@@ -4141,113 +4182,99 @@ function initMultiplayerRound() {
       difficulty: diff,
       cursor: { x: canvas.width / 2, y: canvas.height / 2 },
       snails: {},
-      catches: {},
       scores: mpScores,
     };
 
-    // Assign snail types to each snail player
-    const snailUids = catcherUid === 'CPU' ? uids : uids.filter(u => u !== catcherUid);
-    const picks = pickSnailsForWave(snailUids.length + (settings.cpuFill === 'on' ? Math.max(0, (settings.maxPlayers || 5) - uids.length) : 0));
-
+    // Human snail players
     snailUids.forEach((uid, i) => {
       const pick = picks[i] || picks[0];
       gameState.snails[uid] = {
         x: 30 + Math.random() * (canvas.width - 60),
         y: 30 + Math.random() * (canvas.height - 60),
         angle: Math.random() * Math.PI * 2,
-        alive: true,
-        type: pick.archetype,
-        hue: pick.hue,
-        rarityIdx: pick.rarityIdx,
-        snailName: pick.name,
+        alive: true, type: pick.archetype, hue: pick.hue,
+        rarityIdx: pick.rarityIdx, snailName: pick.name,
         catchRadius: pick.archetype === 'Tank' ? Math.max(5, 12 + pick.hitboxMod) : Math.max(5, 25 + pick.hitboxMod),
         gamertag: players[uid]?.gamertag || 'Player',
-        isCpu: false,
-        ghostVisible: true,
-        speedMult: pick.speedMult,
+        isCpu: false, ghostVisible: true, speedMult: pick.speedMult,
       };
     });
 
-    // CPU snails
+    // CPU snails — create REAL singleplayer snail objects
     if (settings.cpuFill === 'on') {
-      const cpuCount = Math.max(0, (settings.maxPlayers || 5) - uids.length - (catcherUid === 'CPU' ? 0 : 0));
       for (let c = 0; c < cpuCount; c++) {
         const pick = picks[snailUids.length + c] || picks[c % picks.length];
-        const cpuId = `cpu_${c}`;
+        const cpuId = 'cpu_' + c;
+        const spd = 1 + (diff * 0.25 / 12); // wave speed multiplier based on difficulty
+
+        // Create a REAL singleplayer snail using createSnail
+        const realSnail = createSnail(spd, pick);
+        realSnail.id = cpuId;
+        realSnail.snailName = 'CPU ' + pick.name;
+        realSnail.gamertag = 'CPU ' + (c + 1);
+        realSnail.isCpu = true;
+        mpCpuSnailObjects.push(realSnail);
+
+        // Also write to game state for syncing
         gameState.snails[cpuId] = {
-          x: 30 + Math.random() * (canvas.width - 60),
-          y: 30 + Math.random() * (canvas.height - 60),
-          angle: Math.random() * Math.PI * 2,
-          alive: true,
-          type: pick.archetype,
-          hue: pick.hue,
-          rarityIdx: pick.rarityIdx,
-          snailName: `CPU ${pick.name}`,
-          catchRadius: pick.archetype === 'Tank' ? Math.max(5, 12 + pick.hitboxMod) : Math.max(5, 25 + pick.hitboxMod),
-          gamertag: `CPU ${c + 1}`,
-          isCpu: true,
-          ghostVisible: true,
-          speedMult: pick.speedMult,
-          // Singleplayer AI fields — so updateSnail works immediately
-          baseSpeed: 1.5 * pick.speedMult,
-          jukeTimer: 0, jukeCooldown: 0,
-          trail: [], mimicTrail: [],
-          orbitAngle: Math.random() * Math.PI * 2,
-          zigzagDir: 0, zigzagTimer: 0,
-          tricksterCharged: false, ghostTimer: 0,
-          teleportCooldown: 0, _cpuInit: true,
+          x: realSnail.x, y: realSnail.y, angle: realSnail.angle,
+          alive: true, type: pick.archetype, hue: pick.hue,
+          rarityIdx: pick.rarityIdx, snailName: realSnail.snailName,
+          catchRadius: realSnail.catchRadius,
+          gamertag: realSnail.gamertag,
+          isCpu: true, ghostVisible: true, speedMult: pick.speedMult,
         };
       }
     }
 
     mpGameRef.set(gameState);
 
-    // Start timer on host
+    // Timer — host counts down and syncs every 5 seconds
     if (mpTimerInterval) clearInterval(mpTimerInterval);
     mpTimerInterval = setInterval(() => {
-      mpTimer -= 1;
-      mpGameRef.child('timer').set(Math.max(0, mpTimer));
-      if (mpTimer <= 0) {
-        clearInterval(mpTimerInterval);
-        mpRoundEnd('snails'); // time up, snails survive
-      }
-    }, 1000);
+      if (mpRoundEnding) return;
+      mpGameRef.child('timer').set(Math.max(0, Math.floor(mpTimer)));
+    }, 5000);
   }
 
-  // Set up listeners
-  mpSetupListeners();
-
-  // Show/hide mobile buttons
-  mpMoveBtn.style.display = 'none'; // sport moves are automatic now
+  // Show/hide buttons
+  mpMoveBtn.style.display = 'none'; // sport moves are automatic
   mpAbilityBtn.style.display = mpRole === 'snail' ? 'block' : 'none';
-  mpAbilityCooldown = 0;
-  // Update ability button label after snail type is assigned
-  setTimeout(() => {
-    if (mpMySnailData && snailAbilities[mpMySnailData.type]) {
-      mpAbilityBtn.textContent = snailAbilities[mpMySnailData.type].name;
-    }
-  }, 1000);
+  if (mpRole === 'snail') {
+    setTimeout(() => {
+      if (mpMySnailData && snailAbilities[mpMySnailData.type]) {
+        mpAbilityBtn.textContent = snailAbilities[mpMySnailData.type].name;
+      }
+    }, 1500);
+  }
+
+  // Set up Firebase listeners
+  mpSetupListeners();
 }
 
+// ===== FIREBASE LISTENERS =====
 function mpSetupListeners() {
   mpCleanupListeners();
+  if (!mpGameRef) return;
 
-  // Listen for game state
   const stateRef = mpGameRef.on('value', snap => {
     if (!snap.exists()) return;
     const game = snap.val();
-    mpTimer = game.timer || 0;
-    mpRemoteCursor = game.cursor || { x: 400, y: 300 };
-    // MERGE Firebase snail data — don't replace local state (preserves AI fields for CPU snails)
+
+    // Sync timer from host (but local tick handles smooth countdown)
+    if (!mpIsHost) mpTimer = game.timer || mpTimer;
+
+    mpRemoteCursor = game.cursor || mpRemoteCursor;
+
+    // Merge snail data — keep local CPU snail state intact
     const fbSnails = game.snails || {};
     Object.entries(fbSnails).forEach(([uid, fbData]) => {
       if (!mpRemoteSnails[uid]) {
-        mpRemoteSnails[uid] = fbData; // new snail
+        mpRemoteSnails[uid] = fbData;
       } else {
-        // Merge — keep local AI state, update position/alive from Firebase for remote players
         const local = mpRemoteSnails[uid];
+        // For non-CPU or non-host, use Firebase positions
         if (!local.isCpu || !mpIsHost) {
-          // Remote human snail or we're not host — use Firebase positions
           local.x = fbData.x; local.y = fbData.y;
           local.angle = fbData.angle || local.angle;
         }
@@ -4255,71 +4282,47 @@ function mpSetupListeners() {
         local.ghostVisible = fbData.ghostVisible !== undefined ? fbData.ghostVisible : local.ghostVisible;
       }
     });
-    // Remove snails that no longer exist in Firebase
     Object.keys(mpRemoteSnails).forEach(uid => {
       if (!fbSnails[uid]) delete mpRemoteSnails[uid];
     });
 
     if (game.scores) mpScores = game.scores;
 
-    // Find my snail data
+    // My snail data
     if (mpRole === 'snail' && fbUser) {
       mpMySnailData = mpRemoteSnails[fbUser.uid] || null;
-      // If my snail was caught, switch to spectator mode
       if (mpMySnailData && !mpMySnailData.alive && !mpMySnailData._deathShown) {
         mpMySnailData._deathShown = true;
         mpRole = 'spectator';
         mpAbilityBtn.style.display = 'none';
-        mpMoveBtn.style.display = 'none';
         SFX.footballHit();
-        document.getElementById('taunt').textContent = 'YOU WERE CAUGHT! Spectating...';
-        document.getElementById('taunt').style.opacity = 1;
-        document.getElementById('taunt').style.color = '#ff4444';
-        setTimeout(() => { document.getElementById('taunt').style.opacity = 0; document.getElementById('taunt').style.color = '#ff6b6b'; }, 3000);
       }
     }
 
-    // Check state transitions — ALL players see round end
+    // Round end detection for non-host
     if (game.state === 'roundEnd' && mpMode && !mpRoundEnding) {
-      // Determine winner from snail alive status
       const anyAlive = Object.values(game.snails || {}).some(s => s.alive);
       mpRoundEnd(anyAlive ? 'snails' : 'catcher');
     }
   });
   mpListeners.push({ ref: mpGameRef, event: 'value', fn: stateRef });
-
-  // Host: listen for player disconnects during game
-  if (mpIsHost && mpLobbyId) {
-    const dcRef = fbDB.ref(`lobbies/${mpLobbyId}/players`).on('child_removed', snap => {
-      const uid = snap.key;
-      // Convert disconnected player's snail to CPU
-      if (mpRemoteSnails[uid] && mpRemoteSnails[uid].alive) {
-        mpGameRef.child(`snails/${uid}/isCpu`).set(true);
-        mpGameRef.child(`snails/${uid}/gamertag`).set('CPU (DC)');
-      }
-    });
-    mpListeners.push({ ref: fbDB.ref(`lobbies/${mpLobbyId}/players`), event: 'child_removed', fn: dcRef });
-  }
 }
 
 function mpCleanupListeners() {
-  mpListeners.forEach(l => l.ref.off(l.event, l.fn));
+  mpListeners.forEach(l => { try { l.ref.off(l.event, l.fn); } catch(e) {} });
   mpListeners = [];
   if (mpTimerInterval) { clearInterval(mpTimerInterval); mpTimerInterval = null; }
 }
 
-let mpRoundEnding = false;
-let mpFadeAlpha = 0; // for screen fade transitions
-
+// ===== ROUND END =====
 function mpRoundEnd(winner) {
   if (mpRoundEnding) return;
   mpRoundEnding = true;
   if (mpTimerInterval) { clearInterval(mpTimerInterval); mpTimerInterval = null; }
 
-  // Update scores (once only)
   if (winner === 'catcher') {
-    const catcherUid = mpLobbyData.players ? Object.keys(mpLobbyData.players).find(u => mpRemoteSnails[u] === undefined || mpLobbyData.host === u) : 'unknown';
-    mpScores[catcherUid || 'catcher'] = (mpScores[catcherUid || 'catcher'] || 0) + 1;
+    const cUid = mpLobbyData.host || 'catcher';
+    mpScores[cUid] = (mpScores[cUid] || 0) + 1;
   } else {
     Object.entries(mpRemoteSnails).forEach(([uid, s]) => {
       if (s.alive && !s.isCpu) mpScores[uid] = (mpScores[uid] || 0) + 1;
@@ -4331,53 +4334,38 @@ function mpRoundEnd(winner) {
     mpGameRef.child('scores').set(mpScores);
   }
 
-  SFX.victory(); // plays once, no spam
+  SFX.victory();
+  spawnConfetti(canvas.width / 2, canvas.height / 2);
 
-  // Fade to black, show result text, auto-continue
-  mpFadeAlpha = 0;
+  // Build end screen data
   const aliveCount = Object.values(mpRemoteSnails).filter(s => s.alive).length;
-  const msg = winner === 'catcher' ? 'CATCHER WINS!' : `${aliveCount} SNAIL(S) SURVIVED!`;
-  const isFinalRound = mpRoundNum >= mpTotalRounds;
-
-  // Build score text
+  window._mpEndMsg = winner === 'catcher' ? 'CATCHER WINS!' : aliveCount + ' SNAIL(S) SURVIVED!';
   const sorted = Object.entries(mpScores).sort((a,b) => b[1] - a[1]);
-  let scoreLines = [];
-  sorted.forEach(([uid, score], i) => {
+  window._mpEndScores = sorted.map(([uid, score], i) => {
     const name = mpRemoteSnails[uid]?.gamertag || mpLobbyData.players?.[uid]?.gamertag || uid;
-    const icon = i === 0 ? '\u{1F947}' : i === 1 ? '\u{1F948}' : i === 2 ? '\u{1F949}' : `#${i+1}`;
-    scoreLines.push(`${icon} ${name}: ${score} pts`);
+    const icon = i === 0 ? '\u{1F947}' : i === 1 ? '\u{1F948}' : i === 2 ? '\u{1F949}' : '#' + (i+1);
+    return icon + ' ' + name + ': ' + score + ' pts';
   });
+  window._mpEndFinal = mpRoundNum >= mpTotalRounds;
 
-  // Animate: fade to black over 1 sec, show text for 4 sec, then transition
-  const fadeInterval = setInterval(() => {
-    mpFadeAlpha = Math.min(1, mpFadeAlpha + 0.03);
-  }, 16);
+  // Fade to black
+  mpFadeAlpha = 0;
+  const fadeInt = setInterval(() => { mpFadeAlpha = Math.min(1, mpFadeAlpha + 0.03); }, 16);
+  setTimeout(() => { clearInterval(fadeInt); mpFadeAlpha = 1; }, 1000);
 
-  setTimeout(() => {
-    clearInterval(fadeInterval);
-    mpFadeAlpha = 1;
-  }, 1000);
-
-  // After 5 seconds total, auto-continue
+  // Auto-continue after 5 seconds
   setTimeout(() => {
     mpFadeAlpha = 0;
     mpRoundEnding = false;
-
-    if (isFinalRound) {
+    if (mpRoundNum >= mpTotalRounds) {
       mpGameOver();
     } else if (mpIsHost) {
-      // Auto-start next round
-      fbDB.ref(`lobbies/${mpLobbyId}`).once('value', snap => {
+      fbDB.ref('lobbies/' + mpLobbyId).once('value', snap => {
         mpLobbyData = snap.val();
-        initMultiplayerRound();
+        initMPRound();
       });
     }
   }, 5000);
-
-  // Store the message for rendering during fade
-  window._mpEndMsg = msg;
-  window._mpEndScores = scoreLines;
-  window._mpEndFinal = isFinalRound;
 }
 
 function mpGameOver() {
@@ -4390,220 +4378,108 @@ function mpGameOver() {
   document.getElementById('ui').style.display = 'block';
   stopMusic();
 
-  // Return to lobby
   if (mpIsHost) {
-    fbDB.ref(`lobbies/${mpLobbyId}/status`).set('waiting');
-    fbDB.ref(`lobbies/${mpLobbyId}/game`).remove();
+    fbDB.ref('lobbies/' + mpLobbyId + '/status').set('waiting');
+    fbDB.ref('lobbies/' + mpLobbyId + '/game').remove();
   }
   showMainMenu();
   showMenuScreen('menu-multiplayer-screen');
   if (mpLobbyId) showLobby(mpLobbyId);
 }
 
-// Snail player controls — mouse/touch AND WASD
-const mpKeys = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false };
+// ===== SNAIL PLAYER CONTROLS =====
+const mpKeys = { w:false, a:false, s:false, d:false };
 document.addEventListener('keydown', e => {
-  if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') mpKeys.w = true;
-  if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') mpKeys.a = true;
-  if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') mpKeys.s = true;
-  if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') mpKeys.d = true;
+  if (e.key==='w'||e.key==='W'||e.key==='ArrowUp') mpKeys.w=true;
+  if (e.key==='a'||e.key==='A'||e.key==='ArrowLeft') mpKeys.a=true;
+  if (e.key==='s'||e.key==='S'||e.key==='ArrowDown') mpKeys.s=true;
+  if (e.key==='d'||e.key==='D'||e.key==='ArrowRight') mpKeys.d=true;
+  if (e.code==='KeyE'||e.code==='ShiftLeft') {
+    if (mpMode && mpRole==='snail' && mpMySnailData?.alive) { e.preventDefault(); mpTriggerAbility(); }
+  }
 });
 document.addEventListener('keyup', e => {
-  if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') mpKeys.w = false;
-  if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') mpKeys.a = false;
-  if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') mpKeys.s = false;
-  if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') mpKeys.d = false;
+  if (e.key==='w'||e.key==='W'||e.key==='ArrowUp') mpKeys.w=false;
+  if (e.key==='a'||e.key==='A'||e.key==='ArrowLeft') mpKeys.a=false;
+  if (e.key==='s'||e.key==='S'||e.key==='ArrowDown') mpKeys.s=false;
+  if (e.key==='d'||e.key==='D'||e.key==='ArrowRight') mpKeys.d=false;
 });
 
 function mpUpdateMySnail() {
   if (!mpMySnailData || !mpMySnailData.alive) return;
-
   const maxSpeed = 3 * (mpMySnailData.speedMult || 1);
-  let moveX = 0, moveY = 0;
+  let mx = 0, my = 0;
+  if (mpKeys.w) my -= 1;
+  if (mpKeys.s) my += 1;
+  if (mpKeys.a) mx -= 1;
+  if (mpKeys.d) mx += 1;
 
-  // WASD / Arrow keys
-  if (mpKeys.w) moveY -= 1;
-  if (mpKeys.s) moveY += 1;
-  if (mpKeys.a) moveX -= 1;
-  if (mpKeys.d) moveX += 1;
-
-  const usingKeys = moveX !== 0 || moveY !== 0;
-
-  if (usingKeys) {
-    // Normalize diagonal movement
-    const len = Math.sqrt(moveX * moveX + moveY * moveY);
-    mpMySnailData.x += (moveX / len) * maxSpeed;
-    mpMySnailData.y += (moveY / len) * maxSpeed;
-    mpMySnailData.angle = Math.atan2(moveY, moveX);
+  if (mx !== 0 || my !== 0) {
+    const len = Math.sqrt(mx*mx + my*my);
+    mpMySnailData.x += (mx/len) * maxSpeed;
+    mpMySnailData.y += (my/len) * maxSpeed;
+    mpMySnailData.angle = Math.atan2(my, mx);
   } else {
-    // Mouse/touch — snail follows cursor with speed cap
     const dx = mouse.x - mpMySnailData.x;
     const dy = mouse.y - mpMySnailData.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dist = Math.sqrt(dx*dx + dy*dy);
     if (dist > 5) {
       const speed = Math.min(maxSpeed, dist * 0.12);
-      mpMySnailData.x += (dx / dist) * speed;
-      mpMySnailData.y += (dy / dist) * speed;
+      mpMySnailData.x += (dx/dist) * speed;
+      mpMySnailData.y += (dy/dist) * speed;
       mpMySnailData.angle = Math.atan2(dy, dx);
     }
   }
-
-  // Clamp to screen
   mpMySnailData.x = Math.max(30, Math.min(canvas.width - 30, mpMySnailData.x));
   mpMySnailData.y = Math.max(30, Math.min(canvas.height - 30, mpMySnailData.y));
 
-  // Sync to Firebase every 4 frames (~15fps)
+  // Sync to Firebase
   mpSyncCounter++;
   if (mpSyncCounter % 4 === 0 && fbUser) {
-    mpGameRef.child(`snails/${fbUser.uid}`).update({
-      x: Math.round(mpMySnailData.x),
-      y: Math.round(mpMySnailData.y),
-      angle: mpMySnailData.angle,
-    });
-  }
-}
-
-// Snail player football move trigger
-// Signature abilities per snail type
-const snailAbilities = {
-  Runner:    { name: 'SPEED BURST', cooldown: 360, action(s) { const a = s.angle || 0; s.x += Math.cos(a)*120; s.y += Math.sin(a)*120; } },
-  Juker:     { name: 'SHARP JUKE', cooldown: 300, action(s,cx,cy) { const a = Math.atan2(cy-s.y,cx-s.x)+Math.PI/2*(Math.random()<0.5?1:-1); s.x+=Math.cos(a)*100; s.y+=Math.sin(a)*100; } },
-  Orbiter:   { name: 'ORBIT SNAP', cooldown: 360, action(s,cx,cy) { const a = Math.atan2(cy-s.y,cx-s.x)+Math.PI*0.8; s.x=cx+Math.cos(a)*140; s.y=cy+Math.sin(a)*140; } },
-  Trickster: { name: 'FAKE OUT', cooldown: 420, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI; s.x+=Math.cos(a)*160; s.y+=Math.sin(a)*160; } },
-  Shadow:    { name: 'SHADOW STEP', cooldown: 360, action(s,cx,cy) { s.x=cx-(cx-s.x)*2; s.y=cy-(cy-s.y)*0.5; } },
-  Teleporter:{ name: 'TELEPORT', cooldown: 480, action(s) { s.x=30+Math.random()*(canvas.width-60); s.y=30+Math.random()*(canvas.height-60); } },
-  Tank:      { name: 'SHELL BLOCK', cooldown: 300, action(s) { s._shielded=60; } }, // invulnerable 1 sec
-  Mimic:     { name: 'TRAIL SWAP', cooldown: 360, action(s) { s.x=30+Math.random()*(canvas.width-60); s.y=30+Math.random()*(canvas.height-60); } },
-  Zigzag:    { name: 'ZIG ZAG DASH', cooldown: 300, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI; for(let i=0;i<3;i++){s.x+=Math.cos(a+(i%2?0.5:-0.5))*40;s.y+=Math.sin(a+(i%2?0.5:-0.5))*40;} } },
-  Ghost:     { name: 'PHASE OUT', cooldown: 480, action(s) { s.ghostVisible=false; s._phaseTimer=120; } }, // invisible 2 sec
-  Dasher:    { name: 'MEGA DASH', cooldown: 420, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI+(Math.random()-0.5); s.x+=Math.cos(a)*200; s.y+=Math.sin(a)*200; } },
-  Drunk:     { name: 'STUMBLE', cooldown: 240, action(s) { s.x+=(Math.random()-0.5)*150; s.y+=(Math.random()-0.5)*150; } },
-  Magnet:    { name: 'WALL PULL', cooldown: 300, action(s) { const edges=[[30,s.y],[canvas.width-30,s.y],[s.x,30],[s.x,canvas.height-30]]; const near=edges.sort((a,b)=>Math.hypot(a[0]-s.x,a[1]-s.y)-Math.hypot(b[0]-s.x,b[1]-s.y))[0]; s.x=near[0]; s.y=near[1]; } },
-  Reverse:   { name: 'CHARGE DODGE', cooldown: 360, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x); s.x+=Math.cos(a)*60; s.x+=Math.cos(a+Math.PI)*120; s.y+=Math.sin(a)*60; s.y+=Math.sin(a+Math.PI)*120; } },
-  Spiral:    { name: 'SPIRAL BURST', cooldown: 300, action(s) { s.x+=Math.cos(Date.now()*0.01)*100; s.y+=Math.sin(Date.now()*0.01)*100; } },
-  Bouncer:   { name: 'RICOCHET', cooldown: 300, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI; s.x+=Math.cos(a)*150; s.y+=Math.sin(a)*150; } },
-  Stalker:   { name: 'BACK OFF', cooldown: 360, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI; s.x+=Math.cos(a)*130; s.y+=Math.sin(a)*130; } },
-  Warper:    { name: 'WARP', cooldown: 420, action(s) { s.x=canvas.width-s.x; s.y=canvas.height-s.y; } },
-  Dancer:    { name: 'PIROUETTE', cooldown: 300, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x); s.x+=Math.cos(a+Math.PI/2)*100; s.y+=Math.sin(a+Math.PI/2)*100; } },
-  Coward:    { name: 'CORNER DASH', cooldown: 300, action(s,cx,cy) { const corners=[[30,30],[canvas.width-30,30],[30,canvas.height-30],[canvas.width-30,canvas.height-30]]; const far=corners.sort((a,b)=>Math.hypot(b[0]-cx,b[1]-cy)-Math.hypot(a[0]-cx,a[1]-cy))[0]; s.x=far[0]; s.y=far[1]; } },
-  Ninja:     { name: 'VANISH', cooldown: 480, action(s) { s.ghostVisible=false; s._phaseTimer=150; s.x+=(Math.random()-0.5)*100; s.y+=(Math.random()-0.5)*100; } },
-  Charger:   { name: 'BULL RUSH', cooldown: 360, action(s) { const a=Math.random()*Math.PI*2; s.x+=Math.cos(a)*180; s.y+=Math.sin(a)*180; } },
-  Glitcher:  { name: 'GLITCH OUT', cooldown: 300, action(s) { for(let i=0;i<5;i++){s.x+=(Math.random()-0.5)*60;s.y+=(Math.random()-0.5)*60;} } },
-  Pendulum:  { name: 'SWING', cooldown: 300, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI; s.x+=Math.cos(a+Math.sin(Date.now()*0.01)*1.2)*120; s.y+=Math.sin(a+Math.sin(Date.now()*0.01)*1.2)*120; } },
-  Splitter:  { name: 'DECOY SPLIT', cooldown: 420, action(s) { s.x+=(Math.random()-0.5)*120; s.y+=(Math.random()-0.5)*120; } },
-  Decoy:     { name: 'SWAP PLACE', cooldown: 420, action(s) { s.x=30+Math.random()*(canvas.width-60); s.y=30+Math.random()*(canvas.height-60); } },
-  Predictor: { name: 'PREDICT DODGE', cooldown: 360, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI+((Math.random()-0.5)*0.8); s.x+=Math.cos(a)*160; s.y+=Math.sin(a)*160; } },
-  Sleeper:   { name: 'WAKE UP BURST', cooldown: 300, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI; s.x+=Math.cos(a)*180; s.y+=Math.sin(a)*180; } },
-  Liner:     { name: 'STRAIGHT SHOT', cooldown: 240, action(s) { const a=Math.random()*Math.PI*2; s.x+=Math.cos(a)*160; s.y+=Math.sin(a)*160; } },
-  Clingy:    { name: 'BUDDY JUMP', cooldown: 300, action(s) { s.x+=(Math.random()-0.5)*140; s.y+=(Math.random()-0.5)*140; } },
-  Panicker:  { name: 'PANIC SCATTER', cooldown: 240, action(s) { for(let i=0;i<3;i++){s.x+=(Math.random()-0.5)*80;s.y+=(Math.random()-0.5)*80;} } },
-  Phaser:    { name: 'PHASE SHIFT', cooldown: 360, action(s) { s.ghostVisible=false; s._phaseTimer=90; const a=Math.random()*Math.PI*2; s.x+=Math.cos(a)*100; s.y+=Math.sin(a)*100; } },
-  Circler:   { name: 'CIRCLE BURST', cooldown: 300, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI/2; s.x+=Math.cos(a)*120; s.y+=Math.sin(a)*120; } },
-  Baiter:    { name: 'BAIT & SWITCH', cooldown: 360, action(s,cx,cy) { s.x+=Math.cos(Math.atan2(cy-s.y,cx-s.x))*50; setTimeout(()=>{s.x+=Math.cos(Math.atan2(cy-s.y,cx-s.x)+Math.PI)*120;s.y+=Math.sin(Math.atan2(cy-s.y,cx-s.x)+Math.PI)*120;},200); } },
-  Flasher:   { name: 'FLASH STEP', cooldown: 360, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI+(Math.random()-0.5); s.x+=Math.cos(a)*170; s.y+=Math.sin(a)*170; } },
-  Mirror:    { name: 'REFLECT', cooldown: 360, action(s) { s.x=canvas.width-s.x; } },
-  Gravity:   { name: 'GRAVITY PULL', cooldown: 420, action(s,cx,cy) { const a=Math.atan2(cy-s.y,cx-s.x)+Math.PI; s.x+=Math.cos(a)*140; s.y+=Math.sin(a)*140; } },
-  Faker:     { name: 'PLAY DEAD', cooldown: 480, action(s) { s._faking=true; s._fakeTimer=90; } },
-};
-
-let mpAbilityCooldown = 0;
-
-// Signature ability trigger
-function mpTriggerAbility() {
-  if (!mpMySnailData || !mpMySnailData.alive) return;
-  if (mpAbilityCooldown > 0) return;
-  const ability = snailAbilities[mpMySnailData.type];
-  if (!ability) return;
-
-  ability.action(mpMySnailData, mpRemoteCursor.x, mpRemoteCursor.y);
-  mpMySnailData.x = Math.max(30, Math.min(canvas.width - 30, mpMySnailData.x));
-  mpMySnailData.y = Math.max(30, Math.min(canvas.height - 30, mpMySnailData.y));
-
-  if (fbUser) {
-    mpGameRef.child(`snails/${fbUser.uid}`).update({
-      x: Math.round(mpMySnailData.x), y: Math.round(mpMySnailData.y),
-      angle: mpMySnailData.angle, ghostVisible: mpMySnailData.ghostVisible !== false,
-    });
-  }
-
-  mpAbilityCooldown = ability.cooldown;
-  SFX.nearMiss();
-}
-
-// Sport move trigger (football/basketball moves)
-function mpTriggerSportMove() {
-  if (!mpMySnailData || !mpMySnailData.alive) return;
-  if (mpMoveCooldown > 0) return;
-
-  const move = pickFootballMove();
-  move.snailAction(mpMySnailData, mpRemoteCursor.x, mpRemoteCursor.y);
-  mpMySnailData.x = Math.max(30, Math.min(canvas.width - 30, mpMySnailData.x));
-  mpMySnailData.y = Math.max(30, Math.min(canvas.height - 30, mpMySnailData.y));
-
-  if (fbUser) {
-    mpGameRef.child(`snails/${fbUser.uid}`).update({
+    mpGameRef.child('snails/' + fbUser.uid).update({
       x: Math.round(mpMySnailData.x), y: Math.round(mpMySnailData.y), angle: mpMySnailData.angle,
     });
   }
-
-  mpMoveCooldown = 300; // 5 seconds
-  SFX.footballHit();
 }
 
-// Keyboard controls — snail players only use E/Shift for ability
-document.addEventListener('keydown', e => {
-  if (!mpMode || mpRole !== 'snail' || !mpMySnailData?.alive) return;
-  if (e.code === 'KeyE' || e.code === 'ShiftLeft') { e.preventDefault(); mpTriggerAbility(); }
-});
+function mpTriggerAbility() {
+  if (!mpMySnailData || !mpMySnailData.alive || mpAbilityCooldown > 0) return;
+  const ability = snailAbilities[mpMySnailData.type];
+  if (!ability) return;
+  ability.action(mpMySnailData, mpRemoteCursor.x, mpRemoteCursor.y);
+  mpMySnailData.x = Math.max(30, Math.min(canvas.width - 30, mpMySnailData.x));
+  mpMySnailData.y = Math.max(30, Math.min(canvas.height - 30, mpMySnailData.y));
+  mpAbilityCooldown = ability.cooldown;
+  SFX.nearMiss();
+  if (fbUser) {
+    mpGameRef.child('snails/' + fbUser.uid).update({
+      x: Math.round(mpMySnailData.x), y: Math.round(mpMySnailData.y),
+    });
+  }
+}
 
-// Mobile buttons — ABILITY (left) + SPORT MOVE (right)
+// Mobile ability button
 const mpAbilityBtn = document.createElement('button');
 mpAbilityBtn.textContent = 'ABILITY';
 mpAbilityBtn.style.cssText = 'display:none;position:fixed;bottom:20px;left:20px;width:80px;height:70px;border-radius:12px;background:rgba(68,200,68,0.7);color:#fff;font-size:13px;font-weight:bold;border:3px solid #fff;z-index:101;cursor:pointer;touch-action:manipulation;';
 mpAbilityBtn.addEventListener('click', () => { if (mpMode && mpRole === 'snail') mpTriggerAbility(); });
-mpAbilityBtn.addEventListener('touchstart', e => { e.preventDefault(); if (mpMode && mpRole === 'snail') mpTriggerAbility(); }, { passive: false });
 document.body.appendChild(mpAbilityBtn);
 
 const mpMoveBtn = document.createElement('button');
-mpMoveBtn.textContent = 'MOVE!';
-mpMoveBtn.style.cssText = 'display:none;position:fixed;bottom:20px;right:20px;width:80px;height:70px;border-radius:12px;background:rgba(255,68,68,0.7);color:#fff;font-size:13px;font-weight:bold;border:3px solid #fff;z-index:101;cursor:pointer;touch-action:manipulation;';
-mpMoveBtn.addEventListener('click', () => { if (mpMode && mpRole === 'snail') mpTriggerSportMove(); });
-mpMoveBtn.addEventListener('touchstart', e => { e.preventDefault(); if (mpMode && mpRole === 'snail') mpTriggerSportMove(); }, { passive: false });
+mpMoveBtn.style.cssText = 'display:none;';
 document.body.appendChild(mpMoveBtn);
 
-// CPU catcher AI
-// CPU Catcher difficulty levels — shown to snail players so they know what they're up against
-const cpuCatcherLevels = [
-  { name: 'SLEEPY',     speed: 1.5, wobble: 60, reactionDelay: 30, switchDelay: 120, color: '#88ddff' },
-  { name: 'LAZY',       speed: 2.0, wobble: 45, reactionDelay: 20, switchDelay: 90,  color: '#44cc44' },
-  { name: 'CASUAL',     speed: 2.5, wobble: 35, reactionDelay: 15, switchDelay: 70,  color: '#88cc44' },
-  { name: 'FOCUSED',    speed: 3.0, wobble: 25, reactionDelay: 10, switchDelay: 50,  color: '#cccc44' },
-  { name: 'AGGRESSIVE', speed: 3.5, wobble: 18, reactionDelay: 6,  switchDelay: 35,  color: '#ff8844' },
-  { name: 'RELENTLESS', speed: 4.0, wobble: 12, reactionDelay: 3,  switchDelay: 20,  color: '#ff4444' },
-  { name: 'PREDATOR',   speed: 4.5, wobble: 8,  reactionDelay: 1,  switchDelay: 10,  color: '#dd2222' },
-  { name: 'TERMINATOR', speed: 5.5, wobble: 4,  reactionDelay: 0,  switchDelay: 5,   color: '#ff00ff' },
-];
-let cpuCatcherDiff = 3; // default FOCUSED
-let cpuCatcherReactionTimer = 0;
-let cpuCatcherSwitchTimer = 0;
-let cpuCatcherTarget = null;
-
-function getCpuCatcherLevel() {
-  // Map game difficulty (0-11) to catcher level (0-7)
-  return Math.min(7, Math.floor(difficulty * 8 / 12));
-}
-
+// ===== CPU CATCHER AI =====
 function mpCpuCatcherUpdate() {
   const level = cpuCatcherLevels[getCpuCatcherLevel()];
-
-  // Reaction delay — CPU doesn't react instantly
   if (cpuCatcherReactionTimer > 0) { cpuCatcherReactionTimer--; return; }
 
-  // Find target — don't switch targets too often (more human-like)
   cpuCatcherSwitchTimer--;
   if (!cpuCatcherTarget || !cpuCatcherTarget.alive || cpuCatcherSwitchTimer <= 0) {
+    // Find nearest alive snail
     let nearest = null, nearDist = Infinity;
-    Object.values(mpRemoteSnails).forEach(s => {
+    const allSnails = mpCpuSnailObjects.concat(Object.values(mpRemoteSnails).filter(s => !s.isCpu));
+    allSnails.forEach(s => {
       if (!s.alive) return;
       const d = Math.sqrt((s.x - mpRemoteCursor.x)**2 + (s.y - mpRemoteCursor.y)**2);
       if (d < nearDist) { nearDist = d; nearest = s; }
@@ -4614,11 +4490,8 @@ function mpCpuCatcherUpdate() {
   }
 
   if (!cpuCatcherTarget) return;
-  const nearest = cpuCatcherTarget;
-
-  // Move toward target with wobble (imprecision)
-  const tx = nearest.x + (Math.random() - 0.5) * level.wobble;
-  const ty = nearest.y + (Math.random() - 0.5) * level.wobble;
+  const tx = cpuCatcherTarget.x + (Math.random() - 0.5) * level.wobble;
+  const ty = cpuCatcherTarget.y + (Math.random() - 0.5) * level.wobble;
   const dx = tx - mpRemoteCursor.x;
   const dy = ty - mpRemoteCursor.y;
   const d = Math.sqrt(dx*dx + dy*dy);
@@ -4628,301 +4501,220 @@ function mpCpuCatcherUpdate() {
   }
 }
 
-// Host catch detection for multiplayer
-// Anti-cheat: track last known positions
-const mpLastPositions = {};
-
+// ===== CATCH DETECTION (uses singleplayer logic) =====
 function mpCheckCatches() {
-  if (!mpIsHost || mpRoundEnding || cutsceneActive) return; // respect cutscene freeze!
+  if (!mpIsHost || mpRoundEnding || cutsceneActive) return;
   const cx = mpRole === 'catcher' ? mouse.x : mpRemoteCursor.x;
   const cy = mpRole === 'catcher' ? mouse.y : mpRemoteCursor.y;
   const crossR = window._crosshairSize || 20;
 
-  // Build snails array for singleplayer-style detection
-  let closestSnail = null;
-  let closestDist2 = Infinity;
-  let closestUid = null;
-
-  let allDead = true;
+  // Combine CPU snail objects + remote snails
+  const allTargets = [];
+  mpCpuSnailObjects.forEach(s => { if (s.alive) allTargets.push({ snail: s, uid: s.id, isCpu: true }); });
   Object.entries(mpRemoteSnails).forEach(([uid, s]) => {
-    if (!s.alive) return;
-
-    // Anti-cheat for human snails
-    const acOn = mpLobbyData?.settings?.anticheat !== 'off';
-    if (!s.isCpu && mpLastPositions[uid]) {
-      const lp = mpLastPositions[uid];
-      const moveDist = Math.sqrt((s.x - lp.x)**2 + (s.y - lp.y)**2);
-      const maxAllowed = (s.speedMult || 1) * 15 + 200;
-      if (moveDist > maxAllowed * 3) autoCheatDetect(uid, s.gamertag || 'unknown', moveDist, maxAllowed);
-      if (acOn && moveDist > maxAllowed) {
-        s.x = lp.x; s.y = lp.y;
-        mpGameRef.child(`snails/${uid}/x`).set(Math.round(lp.x));
-        mpGameRef.child(`snails/${uid}/y`).set(Math.round(lp.y));
-      }
-    }
-    mpLastPositions[uid] = { x: s.x, y: s.y };
-
-    if (s._shielded && s._shielded > 0) { s._shielded--; allDead = false; return; }
-
-    allDead = false;
-    const dx = cx - s.x;
-    const dy = cy - s.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if (dist < closestDist2) { closestDist2 = dist; closestSnail = s; closestUid = uid; }
+    if (s.alive && !s.isCpu) allTargets.push({ snail: s, uid, isCpu: false });
   });
 
-  if (!closestSnail) {
-    if (allDead && Object.keys(mpRemoteSnails).length > 0) mpRoundEnd('catcher');
-    return;
-  }
+  if (allTargets.length === 0) { mpRoundEnd('catcher'); return; }
 
-  // === EXACT SAME LOGIC AS SINGLEPLAYER checkHoverCatch ===
+  // Find closest
+  let closest = null, closestDist = Infinity, closestUid = null;
+  allTargets.forEach(t => {
+    const dx = cx - t.snail.x, dy = cy - t.snail.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < closestDist) { closestDist = dist; closest = t; closestUid = t.uid; }
+  });
 
-  // Near miss taunts + juke trigger
-  if (closestDist2 < 120) {
-    if (closestSnail.isCpu) {
-      if (closestDist2 < 50 && Math.random() < 0.1) SFX.nearMiss();
-      closestSnail.jukeTimer = 30;
-      if (Math.random() < 0.01) showTaunt(taunts);
-    }
+  if (!closest) return;
+  const s = closest.snail;
+
+  // Near miss taunts (CPU snails only)
+  if (closestDist < 120 && closest.isCpu) {
+    if (closestDist < 50 && Math.random() < 0.1) SFX.nearMiss();
+    s.jukeTimer = 30;
+    if (Math.random() < 0.01) showTaunt(taunts);
   }
 
   // Ghost/Ninja invisible check
-  if ((closestSnail.type === 'Ghost' || closestSnail.type === 'Ninja') && !closestSnail.ghostVisible) {
-    return; // can't catch invisible
-  }
+  if ((s.type === 'Ghost' || s.type === 'Ninja') && !s.ghostVisible) return;
 
-  const catchDist = (closestSnail.catchRadius || 25) + crossR;
-  if (closestDist2 < catchDist) {
-    // FOOTBALL MOVE — exact same as singleplayer: triggerFootballCutscene with FULL freeze
-    if (closestSnail.isCpu && Math.random() < (diffLevels[difficulty]?.footballChance || 0.1)) {
-      triggerFootballCutscene(closestSnail); // FULL singleplayer cutscene — freeze, letterbox, shake, everything
-      // Sync new position after move
-      if (mpIsHost) {
-        mpGameRef.child(`snails/${closestUid}/x`).set(Math.round(closestSnail.x));
-        mpGameRef.child(`snails/${closestUid}/y`).set(Math.round(closestSnail.y));
-      }
+  const catchDist = (s.catchRadius || 25) + crossR;
+  if (closestDist < catchDist) {
+    // CPU snails can football move — FULL singleplayer cutscene
+    if (closest.isCpu && Math.random() < (diffLevels[difficulty]?.footballChance || 0.1)) {
+      triggerFootballCutscene(s); // EXACT singleplayer function
+      mpGameRef.child('snails/' + closestUid + '/x').set(Math.round(s.x));
+      mpGameRef.child('snails/' + closestUid + '/y').set(Math.round(s.y));
       return;
     }
 
-    // CATCH — same as singleplayer catchSnail
-    closestSnail.alive = false;
-    mpGameRef.child(`snails/${closestUid}/alive`).set(false);
+    // CATCH
+    s.alive = false;
+    mpGameRef.child('snails/' + closestUid + '/alive').set(false);
     SFX.catch();
-    spawnConfetti(closestSnail.x, closestSnail.y);
+    spawnConfetti(s.x, s.y);
 
     // Check if all dead
-    const stillAlive = Object.values(mpRemoteSnails).some(s => s.alive);
-    if (!stillAlive) mpRoundEnd('catcher');
+    const anyAlive = mpCpuSnailObjects.some(ss => ss.alive) ||
+                     Object.values(mpRemoteSnails).some(ss => ss.alive && !ss.isCpu);
+    if (!anyAlive) mpRoundEnd('catcher');
   }
 }
 
-// CPU snail AI (host runs for CPU snails)
-function mpUpdateCpuSnails() {
-  if (!mpIsHost) return;
-  const cx = mpRole === 'catcher' ? mouse.x : mpRemoteCursor.x;
-  const cy = mpRole === 'catcher' ? mouse.y : mpRemoteCursor.y;
-
-  // Use actual singleplayer AI — build fake mouse position for updateSnail
-  const savedMouse = { x: mouse.x, y: mouse.y };
-  mouse.x = cx; mouse.y = cy;
-
-  Object.entries(mpRemoteSnails).forEach(([uid, s]) => {
-    if (!s.isCpu || !s.alive) return;
-    // Build a snail object compatible with updateSnail()
-    if (!s._cpuInit) {
-      s._cpuInit = true;
-      s.baseSpeed = 1.5 * (s.speedMult || 1);
-      s.jukeTimer = 0; s.jukeCooldown = 0;
-      s.trail = []; s.mimicTrail = [];
-      s.orbitAngle = Math.random() * Math.PI * 2;
-      s.zigzagDir = 0; s.zigzagTimer = 0;
-      s.tricksterCharged = false; s.ghostTimer = 0;
-      s.teleportCooldown = 0; s.ghostVisible = true;
-      s.catchRadius = s.catchRadius || 25;
-    }
-    updateSnail(s);
-  });
-
-  mouse.x = savedMouse.x; mouse.y = savedMouse.y;
-
-  // Sync CPU snails every 4 frames
-  if (mpSyncCounter % 4 === 0) {
-    const updates = {};
-    Object.entries(mpRemoteSnails).forEach(([uid, s]) => {
-      if (s.isCpu && s.alive) {
-        updates[`snails/${uid}/x`] = Math.round(s.x);
-        updates[`snails/${uid}/y`] = Math.round(s.y);
-      }
-    });
-    if (Object.keys(updates).length > 0) mpGameRef.update(updates);
-  }
-}
-
-// Main multiplayer game tick
+// ===== MAIN MP GAME TICK =====
 function mpGameTick() {
   mpSyncCounter++;
   if (mpMoveCooldown > 0) mpMoveCooldown--;
   if (mpAbilityCooldown > 0) {
     mpAbilityCooldown--;
-    // Update ability button text with cooldown
     if (mpRole === 'snail' && mpMySnailData) {
       const ab = snailAbilities[mpMySnailData.type];
-      if (ab) mpAbilityBtn.textContent = mpAbilityCooldown > 0 ? `${Math.ceil(mpAbilityCooldown/60)}s` : ab.name;
+      if (ab) mpAbilityBtn.textContent = mpAbilityCooldown > 0 ? Math.ceil(mpAbilityCooldown/60) + 's' : ab.name;
       mpAbilityBtn.style.opacity = mpAbilityCooldown > 0 ? '0.4' : '1';
     }
   }
 
-  // Handle cutscene timer — MUST be here since mpMode skips the main game loop's cutscene handler
+  // Cutscene timer
   if (cutsceneActive) {
     cutsceneTimer--;
-    if (cutsceneTimer <= 0) {
-      endCutscene();
-    }
-  }
-
-  // Handle phase timers for Ghost/Ninja/Phaser abilities
-  if (mpMySnailData && mpMySnailData._phaseTimer) {
-    mpMySnailData._phaseTimer--;
-    if (mpMySnailData._phaseTimer <= 0) {
-      mpMySnailData.ghostVisible = true;
-      mpMySnailData._phaseTimer = 0;
-      if (fbUser) mpGameRef.child(`snails/${fbUser.uid}/ghostVisible`).set(true);
-    }
+    if (cutsceneTimer <= 0) endCutscene();
   }
 
   const headStartActive = mpHeadStart > 0;
   if (headStartActive) mpHeadStart--;
 
-  // Local timer tick (smooth countdown for all players, not just host)
+  // Local timer tick
   if (!headStartActive && !mpRoundEnding && mpTimer > 0) {
-    mpTimer -= 1/60; // 60fps = 1 second per 60 frames
-    if (mpTimer <= 0 && mpIsHost) {
-      mpTimer = 0;
-      mpRoundEnd('snails');
-    }
+    mpTimer -= 1/60;
+    if (mpTimer <= 0 && mpIsHost) { mpTimer = 0; mpRoundEnd('snails'); }
   }
 
-  // Snail player movement (not if spectating or dead)
+  // Snail player movement
   if (mpRole === 'snail' && mpMySnailData?.alive) {
     mpUpdateMySnail();
-    // Auto sport moves like singleplayer — triggers when catcher gets close
-    if (mpMySnailData && mpMySnailData.alive && mpMoveCooldown <= 0 && !headStartActive && !mpRoundEnding) {
+    // Auto sport moves when catcher is close
+    if (mpMoveCooldown <= 0 && !headStartActive && !mpRoundEnding) {
       const cdx = mpRemoteCursor.x - mpMySnailData.x;
       const cdy = mpRemoteCursor.y - mpMySnailData.y;
-      const cDist = Math.sqrt(cdx*cdx + cdy*cdy);
-      if (cDist < 80 && Math.random() < diffLevels[difficulty]?.footballChance || 0.1) {
-        mpTriggerSportMove();
+      if (Math.sqrt(cdx*cdx + cdy*cdy) < 80 && Math.random() < (diffLevels[difficulty]?.footballChance || 0.1)) {
+        const move = pickFootballMove();
+        move.snailAction(mpMySnailData, mpRemoteCursor.x, mpRemoteCursor.y);
+        mpMySnailData.x = Math.max(30, Math.min(canvas.width-30, mpMySnailData.x));
+        mpMySnailData.y = Math.max(30, Math.min(canvas.height-30, mpMySnailData.y));
+        mpMoveCooldown = 300;
+        SFX.footballHit();
       }
     }
   }
 
-  // Catcher is FROZEN during head start
+  // Catcher frozen during head start
   if (!headStartActive) {
-    // CPU catcher
     if (mpIsHost && mpLobbyData?.settings?.cpuCatcher === 'yes') {
       mpCpuCatcherUpdate();
       if (mpSyncCounter % 4 === 0) mpGameRef.child('cursor').set({ x: Math.round(mpRemoteCursor.x), y: Math.round(mpRemoteCursor.y) });
     }
-
-    // Catcher syncs cursor
     if (mpRole === 'catcher' && mpSyncCounter % 4 === 0) {
       mpGameRef.child('cursor').set({ x: Math.round(mouse.x), y: Math.round(mouse.y) });
     }
-
-    // Host duties (catch detection only when head start over)
     if (mpIsHost) {
-      mpUpdateCpuSnails();
+      // Update CPU snails using EXACT singleplayer updateSnail
+      const savedMouse = { x: mouse.x, y: mouse.y };
+      const cx = mpRole === 'catcher' ? mouse.x : mpRemoteCursor.x;
+      const cy = mpRole === 'catcher' ? mouse.y : mpRemoteCursor.y;
+      mouse.x = cx; mouse.y = cy;
+      mpCpuSnailObjects.forEach(s => { if (s.alive) updateSnail(s); });
+      mouse.x = savedMouse.x; mouse.y = savedMouse.y;
+
+      // Sync CPU positions
+      if (mpSyncCounter % 4 === 0) {
+        const updates = {};
+        mpCpuSnailObjects.forEach(s => {
+          if (s.alive) { updates['snails/' + s.id + '/x'] = Math.round(s.x); updates['snails/' + s.id + '/y'] = Math.round(s.y); }
+        });
+        if (Object.keys(updates).length > 0) mpGameRef.update(updates);
+      }
+
       mpCheckCatches();
     }
   } else if (mpIsHost) {
-    // During head start, still update CPU snails so they scatter
-    mpUpdateCpuSnails();
+    // During head start, CPU snails scatter
+    const savedMouse = { x: mouse.x, y: mouse.y };
+    mouse.x = canvas.width / 2; mouse.y = canvas.height / 2;
+    mpCpuSnailObjects.forEach(s => { if (s.alive) updateSnail(s); });
+    mouse.x = savedMouse.x; mouse.y = savedMouse.y;
   }
 
-  // === RENDER ===
-
-  // Catcher gets BLACK SCREEN during head start (can't see snails)
+  // ===== RENDER =====
   if (headStartActive && mpRole === 'catcher') {
+    // Black screen for catcher during head start
     ctx.fillStyle = '#0a0a1e';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   } else {
     drawBackground();
-
-    // Draw all snails using FULL singleplayer rendering — same as main game
+    // Draw CPU snails using EXACT singleplayer drawSnailAt
+    mpCpuSnailObjects.forEach(s => { if (s.alive) drawSnailAt(s); });
+    // Draw remote human snails
     Object.entries(mpRemoteSnails).forEach(([uid, s]) => {
-      if (!s.alive) return;
-      const renderS = (uid === fbUser?.uid && mpMySnailData) ? mpMySnailData : s;
-      // Init persistent render data if missing
+      if (!s.alive || s.isCpu) return;
+      const renderS = (fbUser && uid === fbUser.uid && mpMySnailData) ? mpMySnailData : s;
       if (!s._renderSnail) {
-        s._renderSnail = {
-          trail: [], hue: s.hue || 0, type: s.type,
+        s._renderSnail = { trail: [], hue: s.hue || 0, type: s.type,
           saturation: (s.type === 'Shadow' || s.type === 'Ghost' || s.type === 'Ninja') ? 10 : undefined,
-          rarity: rarities[s.rarityIdx || 0], rarityIdx: s.rarityIdx || 0,
-        };
+          rarity: rarities[s.rarityIdx || 0], rarityIdx: s.rarityIdx || 0 };
       }
       const rs = s._renderSnail;
       rs.x = renderS.x; rs.y = renderS.y; rs.angle = renderS.angle || 0;
       rs.ghostVisible = s.ghostVisible !== false;
-      // Add to trail
-      if (time % 3 === 0) {
-        rs.trail.push({ x: rs.x, y: rs.y, alpha: 0.4 });
-        if (rs.trail.length > 100) rs.trail.shift();
-      }
+      if (time % 3 === 0) { rs.trail.push({ x: rs.x, y: rs.y, alpha: 0.4 }); if (rs.trail.length > 100) rs.trail.shift(); }
       drawSnailAt(rs);
     });
   }
 
-  // Draw cursor — only catcher sees it
+  // Draw catcher cursor (only catcher sees it)
   if (mpRole === 'catcher') {
     ctx.save();
     ctx.translate(mouse.x, mouse.y);
     const chSize = window._crosshairSize || 20;
-    ctx.beginPath();
-    ctx.arc(0, 0, chSize, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4,4]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(-8, 0); ctx.lineTo(8, 0);
-    ctx.moveTo(0, -8); ctx.lineTo(0, 8);
-    ctx.strokeStyle = 'rgba(255,100,100,0.8)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, chSize, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(8,0); ctx.moveTo(0,-8); ctx.lineTo(0,8);
+    ctx.strokeStyle = 'rgba(255,100,100,0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.restore();
   }
 
-  // ============ CLEAN MP HUD LAYOUT ============
-  ctx.save();
-  const aliveSnails = Object.values(mpRemoteSnails).filter(s => s.alive).length;
-  const totalSnails = Object.keys(mpRemoteSnails).length;
+  // Draw cutscene effects if active
+  if (cutsceneActive) drawCutsceneEffects();
+  if (cutsceneActive) drawCursor(); // singleplayer cursor with stars etc
 
-  // === TOP CENTER: Timer (big, clear) ===
+  // ===== HUD — clean and organized =====
+  ctx.save();
+  const aliveSnails = mpCpuSnailObjects.filter(s => s.alive).length + Object.values(mpRemoteSnails).filter(s => s.alive && !s.isCpu).length;
+  const totalSnailCount = mpCpuSnailObjects.length + Object.values(mpRemoteSnails).filter(s => !s.isCpu).length;
+
+  // Top center: timer
   ctx.textAlign = 'center';
-  ctx.font = `bold clamp(20px, 5vw, 32px) sans-serif`;
+  ctx.font = 'bold ' + Math.max(20, 32) + 'px sans-serif';
   ctx.fillStyle = mpTimer <= 10 ? '#ff4444' : mpTimer <= 20 ? '#ffaa00' : 'rgba(255,255,255,0.8)';
   ctx.fillText(Math.ceil(Math.max(0, mpTimer)) + 's', canvas.width / 2, 35);
 
-  // === TOP CENTER: Round + Snail count (small, below timer) ===
+  // Below timer: round + snail count
   ctx.font = '11px sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.fillText(`R${mpRoundNum}/${mpTotalRounds}  |  ${aliveSnails}/${totalSnails} snails`, canvas.width / 2, 52);
+  ctx.fillText('R' + mpRoundNum + '/' + mpTotalRounds + '  |  ' + aliveSnails + '/' + totalSnailCount + ' snails', canvas.width / 2, 52);
 
-  // === TOP LEFT: CPU catcher level (only if CPU catcher) ===
+  // Top left: CPU catcher level
   if (mpLobbyData?.settings?.cpuCatcher === 'yes') {
     const lvl = cpuCatcherLevels[getCpuCatcherLevel()];
     ctx.textAlign = 'left';
     ctx.font = 'bold 11px sans-serif';
     ctx.fillStyle = lvl.color;
-    ctx.fillText(lvl.name, 90, 15);
+    ctx.fillText('CATCHER: ' + lvl.name, 90, 15);
   }
 
-  // === HEAD START COUNTDOWN (center, big, temporary) ===
-  if (mpHeadStart > 0) {
+  // Head start countdown
+  if (headStartActive) {
     ctx.textAlign = 'center';
-    ctx.font = `bold ${Math.max(30, 50)}px sans-serif`;
+    ctx.font = 'bold ' + Math.max(30, 50) + 'px sans-serif';
     ctx.fillStyle = '#ffd700';
     ctx.fillText(Math.ceil(mpHeadStart / 60), canvas.width / 2, canvas.height / 2);
     ctx.font = '16px sans-serif';
@@ -4930,45 +4722,38 @@ function mpGameTick() {
     ctx.fillText(mpRole === 'catcher' ? 'WAITING...' : 'GET READY!', canvas.width / 2, canvas.height / 2 + 30);
   }
 
-  // === BOTTOM LEFT: Role-specific info ===
+  // Bottom left: role-specific info
   if (mpRole === 'spectator') {
     ctx.textAlign = 'left';
     ctx.font = '12px sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.fillText('SPECTATING', 10, canvas.height - 15);
   } else if (mpRole === 'snail' && mpMySnailData?.alive) {
-    // Ability cooldown — bottom left, out of the way
     const ability = snailAbilities[mpMySnailData?.type];
     if (ability) {
       ctx.textAlign = 'left';
       ctx.font = 'bold 12px sans-serif';
-      if (mpAbilityCooldown > 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.fillText(`${ability.name} (${Math.ceil(mpAbilityCooldown/60)}s)`, 10, canvas.height - 15);
-      } else {
-        ctx.fillStyle = 'rgba(68,255,68,0.7)';
-        ctx.fillText(`[E] ${ability.name} READY`, 10, canvas.height - 15);
-      }
+      ctx.fillStyle = mpAbilityCooldown > 0 ? 'rgba(255,255,255,0.3)' : 'rgba(68,255,68,0.7)';
+      ctx.fillText(mpAbilityCooldown > 0 ? ability.name + ' (' + Math.ceil(mpAbilityCooldown/60) + 's)' : '[E] ' + ability.name, 10, canvas.height - 15);
     }
   }
 
   ctx.restore();
 
-  // Round end fade overlay
+  // Fade overlay for round end
   if (mpFadeAlpha > 0) {
     ctx.save();
-    ctx.fillStyle = `rgba(0, 0, 0, ${mpFadeAlpha})`;
+    ctx.fillStyle = 'rgba(0,0,0,' + mpFadeAlpha + ')';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     if (mpFadeAlpha > 0.5 && window._mpEndMsg) {
       ctx.globalAlpha = Math.min(1, (mpFadeAlpha - 0.5) * 2);
       ctx.textAlign = 'center';
-      ctx.font = `bold ${Math.max(24, 40)}px sans-serif`;
+      ctx.font = 'bold ' + Math.max(24, 40) + 'px sans-serif';
       ctx.fillStyle = '#ffd700';
       ctx.fillText(window._mpEndMsg, canvas.width / 2, canvas.height / 2 - 60);
       ctx.font = '16px sans-serif';
       ctx.fillStyle = '#aaa';
-      ctx.fillText(window._mpEndFinal ? 'FINAL RESULTS' : `Round ${mpRoundNum} of ${mpTotalRounds}`, canvas.width / 2, canvas.height / 2 - 25);
+      ctx.fillText(window._mpEndFinal ? 'FINAL RESULTS' : 'Round ' + mpRoundNum + ' of ' + mpTotalRounds, canvas.width / 2, canvas.height / 2 - 25);
       if (window._mpEndScores) {
         ctx.font = '14px sans-serif';
         window._mpEndScores.forEach((line, i) => {
@@ -4985,7 +4770,6 @@ function mpGameTick() {
 
   updateConfetti();
 }
-
 // ============ MUSIC SYSTEM (game style) ============
 let musicPlaying = false, currentMusicType = '';
 let musicNodes = [];
