@@ -822,6 +822,11 @@
     <button id="settings-mainmenu" style="padding:12px 30px;font-size:16px;font-weight:bold;background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer;display:none;">MAIN MENU</button>
   </div>
   <div style="display:flex;gap:10px;margin-top:15px;flex-wrap:wrap;justify-content:center;">
+    <button class="menu-btn" id="settings-export" style="background:#44cc44;color:#1a1a2e;padding:8px 20px;font-size:13px;">EXPORT PROGRESS</button>
+    <button class="menu-btn" id="settings-import" style="background:#ffaa00;color:#1a1a2e;padding:8px 20px;font-size:13px;">IMPORT PROGRESS</button>
+  </div>
+  <input type="file" id="import-file" accept=".json" style="display:none;">
+  <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;justify-content:center;">
     <button class="menu-btn" id="settings-feedback" style="background:#4488ff;color:#fff;padding:8px 20px;font-size:13px;">SEND FEEDBACK</button>
     <button class="menu-btn" id="settings-inbox" style="background:#882222;color:#fff;padding:8px 20px;font-size:13px;display:none;">FEEDBACK INBOX</button>
     <button class="menu-btn" id="settings-reports" style="background:#882222;color:#fff;padding:8px 20px;font-size:13px;display:none;">CHEAT REPORTS</button>
@@ -5056,6 +5061,55 @@ function isDevUser() {
   const tag = getGamertag().trim();
   return DEV_GAMERTAGS.includes(tag);
 }
+
+// ============ EXPORT / IMPORT PROGRESS ============
+document.getElementById('settings-export').addEventListener('click', () => {
+  SFX.uiClick();
+  // Gather ALL localStorage data for current profile
+  const exportData = { _exportVersion: 2, _exportDate: new Date().toISOString(), _profile: currentProfile };
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key) exportData[key] = localStorage.getItem(key);
+  }
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `snailgame-backup-${getGamertag() || 'unknown'}-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  alert('Progress exported! Keep this file safe.');
+});
+
+document.getElementById('settings-import').addEventListener('click', () => {
+  SFX.uiClick();
+  document.getElementById('import-file').click();
+});
+
+document.getElementById('import-file').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data._exportVersion) { alert('Invalid backup file.'); return; }
+      if (!confirm('Import this backup? This will REPLACE all current progress.')) return;
+      // Write all keys to localStorage
+      Object.entries(data).forEach(([key, val]) => {
+        if (!key.startsWith('_export') && !key.startsWith('_profile')) {
+          localStorage.setItem(key, val);
+        }
+      });
+      alert('Progress imported! Reloading...');
+      location.reload();
+    } catch(err) {
+      alert('Failed to read file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // reset so same file can be imported again
+});
 
 // Open feedback form
 document.getElementById('settings-feedback').addEventListener('click', () => {
