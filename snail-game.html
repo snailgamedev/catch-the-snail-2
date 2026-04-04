@@ -926,6 +926,10 @@
     <div class="setting-desc">Sound effects volume</div>
   </div>
   <div class="settings-group">
+    <label>Music <select id="set-music"><option value="on">On</option><option value="off">Off</option></select></label>
+    <div class="setting-desc">Toggle background music on/off</div>
+  </div>
+  <div class="settings-group">
     <label>Crosshair Size <input type="range" id="set-crosshair" min="10" max="40" value="20"></label>
     <div class="setting-desc">Size of your cursor crosshair</div>
   </div>
@@ -5977,7 +5981,18 @@ let musicPlaying = false, currentMusicType = '';
 let musicNodes = [];
 let musicTimers = [];
 
+function stopMusic() {
+  if (!musicPlaying) return;
+  musicNodes.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
+  musicTimers.forEach(t => clearInterval(t));
+  musicNodes = [];
+  musicTimers = [];
+  musicPlaying = false;
+  currentMusicType = '';
+}
+
 function startMusic(type) {
+  if (window._musicOn === false) return; // music toggled off
   if (musicPlaying && currentMusicType === type) return;
   // Crossfade — fade old out while new fades in
   const wasPlaying = musicPlaying;
@@ -7056,7 +7071,7 @@ function gameLoop() {
 }
 
 // ============ SETTINGS SYSTEM ============
-const defaultSettings = { volume: 50, sfx: 100, crosshairSize: isMobile ? 35 : 20, shake: 'full', showDiff: 'yes', cutSpeed: 'normal', trail: 'on' };
+const defaultSettings = { volume: 50, sfx: 100, music: 'on', crosshairSize: isMobile ? 35 : 20, shake: 'full', showDiff: 'yes', cutSpeed: 'normal', trail: 'on' };
 let gameSettings = { ...defaultSettings };
 
 function loadSettings() {
@@ -7074,6 +7089,9 @@ function applySettings() {
   // Volume affects the SFX system
   const vol = (gameSettings.volume / 100) * (gameSettings.sfx / 100);
   window._sfxVol = vol;
+  // Music toggle
+  window._musicOn = gameSettings.music !== 'off';
+  if (!window._musicOn && musicPlaying) stopMusic();
   // Crosshair size
   window._crosshairSize = gameSettings.crosshairSize;
   // Difficulty bar visibility
@@ -7091,6 +7109,7 @@ window.playTone = function(freq, duration, type, vol) {
 document.getElementById('settings-close').addEventListener('click', () => {
   gameSettings.volume = parseInt(document.getElementById('set-volume').value);
   gameSettings.sfx = parseInt(document.getElementById('set-sfx').value);
+  gameSettings.music = document.getElementById('set-music').value;
   gameSettings.crosshairSize = parseInt(document.getElementById('set-crosshair').value);
   gameSettings.shake = document.getElementById('set-shake').value;
   gameSettings.showDiff = document.getElementById('set-showdiff').value;
@@ -7121,6 +7140,7 @@ document.getElementById('settings-mainmenu').addEventListener('click', () => {
   // Save settings first
   gameSettings.volume = parseInt(document.getElementById('set-volume').value);
   gameSettings.sfx = parseInt(document.getElementById('set-sfx').value);
+  gameSettings.music = document.getElementById('set-music').value;
   gameSettings.crosshairSize = parseInt(document.getElementById('set-crosshair').value);
   gameSettings.shake = document.getElementById('set-shake').value;
   gameSettings.showDiff = document.getElementById('set-showdiff').value;
@@ -7140,6 +7160,7 @@ document.getElementById('settings-mainmenu').addEventListener('click', () => {
 function openSettings() {
   document.getElementById('set-volume').value = gameSettings.volume;
   document.getElementById('set-sfx').value = gameSettings.sfx;
+  document.getElementById('set-music').value = gameSettings.music || 'on';
   document.getElementById('set-crosshair').value = gameSettings.crosshairSize;
   document.getElementById('set-shake').value = gameSettings.shake;
   document.getElementById('set-showdiff').value = gameSettings.showDiff;
