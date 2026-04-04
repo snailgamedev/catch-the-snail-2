@@ -5241,7 +5241,8 @@ function mpGameTick() {
 
   updateConfetti();
 }
-// ============ MUSIC SYSTEM (ULTRA edition) ============
+
+// ============ MUSIC SYSTEM (FIRE edition) ============
 let musicPlaying = false, currentMusicType = '';
 let musicNodes = [];
 let musicTimers = [];
@@ -5252,7 +5253,7 @@ function startMusic(type) {
   try {
     const ctx = ensureAudio();
     if (ctx.state !== 'running') return;
-    const vol = 0.035 * (window._sfxVol || 0.5);
+    const vol = 0.04 * (window._sfxVol || 0.5);
     const now = ctx.currentTime;
 
     const master = ctx.createGain();
@@ -5263,307 +5264,289 @@ function startMusic(type) {
     musicPlaying = true;
     currentMusicType = type;
 
-    // Each screen = completely different genre
     if (type === 'menu') {
-      // MENU: Mysterious/intriguing — minor key arpeggios, echoing, suspenseful
-      const arp = ctx.createOscillator(); arp.type = 'sine';
-      const arpG = ctx.createGain(); arpG.gain.value = 0.2;
-      const delay = ctx.createDelay(); delay.delayTime.value = 0.3;
-      const delayG = ctx.createGain(); delayG.gain.value = 0.3;
-      arp.connect(arpG); arpG.connect(master); arpG.connect(delay); delay.connect(delayG); delayG.connect(master); delayG.connect(delay);
+      // MENU: Dark trap beat — 808 bass, hi-hats, mysterious melody, hard-hitting
+      const bass808 = ctx.createOscillator(); bass808.type = 'sine';
+      const bassG = ctx.createGain(); bassG.gain.value = 0;
+      bass808.connect(bassG); bassG.connect(master);
+      const mel = ctx.createOscillator(); mel.type = 'square';
+      const melG = ctx.createGain(); melG.gain.value = 0;
+      const melF = ctx.createBiquadFilter(); melF.type = 'lowpass'; melF.frequency.value = 1800;
+      mel.connect(melF); melF.connect(melG); melG.connect(master);
       const pad = ctx.createOscillator(); pad.type = 'sawtooth';
-      const padG = ctx.createGain(); padG.gain.value = 0.04;
-      const padF = ctx.createBiquadFilter(); padF.type = 'lowpass'; padF.frequency.value = 400;
+      const padG = ctx.createGain(); padG.gain.value = 0.03;
+      const padF = ctx.createBiquadFilter(); padF.type = 'lowpass'; padF.frequency.value = 500;
       pad.connect(padF); padF.connect(padG); padG.connect(master);
-      const sub = ctx.createOscillator(); sub.type = 'sine';
-      const subG = ctx.createGain(); subG.gain.value = 0.3;
-      sub.connect(subG); subG.connect(master);
-      // E minor arpeggio — mysterious, dark, intriguing
-      const notes = [164,196,247,330,392,330,247,196,164,131,164,196,247,294,330,294];
-      const bassN = [82,82,98,98,110,110,98,98,82,82,73,73,82,82,98,98];
+      const hat = ctx.createOscillator(); hat.type = 'sawtooth'; hat.frequency.value = 8000;
+      const hatG = ctx.createGain(); hatG.gain.value = 0;
+      const hatF = ctx.createBiquadFilter(); hatF.type = 'highpass'; hatF.frequency.value = 6000;
+      hat.connect(hatF); hatF.connect(hatG); hatG.connect(master);
+      // Db minor — dark, moody, trap
+      const notes = [139,156,165,185,208,185,165,156,139,131,123,131,139,165,185,208,233,208,185,165,156,139,131,123];
+      const bNotes = [35,35,35,35,39,39,39,39,41,41,41,41,39,39,39,39,35,35,35,35,33,33,33,33];
       let step = 0;
-      arp.frequency.value = notes[0]; pad.frequency.value = 82; sub.frequency.value = bassN[0];
-      arp.start(now); pad.start(now); sub.start(now);
-      musicNodes = [arp, pad, sub, master, arpG, padG, subG, padF, delay, delayG];
+      bass808.frequency.value = bNotes[0]; mel.frequency.value = notes[0]; pad.frequency.value = 69;
+      bass808.start(now); mel.start(now); pad.start(now); hat.start(now);
+      musicNodes = [bass808, mel, pad, hat, master, bassG, melG, padG, hatG, melF, padF, hatF];
+      musicTimers.push(setInterval(() => { try {
+        step = (step+1) % notes.length;
+        const t = ctx.currentTime;
+        mel.frequency.setValueAtTime(notes[step], t);
+        melG.gain.setValueAtTime(0.07, t); melG.gain.linearRampToValueAtTime(0.02, t + 0.15);
+        // 808 slides
+        if (step % 4 === 0) { bass808.frequency.setValueAtTime(bNotes[step] * 2, t); bass808.frequency.exponentialRampToValueAtTime(bNotes[step], t + 0.3); bassG.gain.setValueAtTime(0.4, t); bassG.gain.exponentialRampToValueAtTime(0.001, t + 0.5); }
+        // Rapid hi-hats
+        hatG.gain.setValueAtTime(0.015, t); hatG.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+        if (step % 2 === 0) { hatG.gain.setValueAtTime(0.025, t); hatG.gain.exponentialRampToValueAtTime(0.001, t + 0.05); }
+        // Pad filter sweep
+        padF.frequency.setValueAtTime(300 + Math.sin(t * 0.3) * 200, t);
+      } catch(e) {} }, 190));
+    }
+
+    else if (type === 'leaderboard') {
+      // LEADERBOARD: Hype electronic — build-up drops, aggressive synth, stadium energy
+      const synth = ctx.createOscillator(); synth.type = 'sawtooth';
+      const synthG = ctx.createGain(); synthG.gain.value = 0;
+      const synthF = ctx.createBiquadFilter(); synthF.type = 'lowpass'; synthF.frequency.value = 3000;
+      synth.connect(synthF); synthF.connect(synthG); synthG.connect(master);
+      const sub = ctx.createOscillator(); sub.type = 'sine';
+      const subG = ctx.createGain(); subG.gain.value = 0;
+      sub.connect(subG); subG.connect(master);
+      const lead = ctx.createOscillator(); lead.type = 'square';
+      const leadG = ctx.createGain(); leadG.gain.value = 0;
+      const leadF = ctx.createBiquadFilter(); leadF.type = 'bandpass'; leadF.frequency.value = 2000; leadF.Q.value = 3;
+      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
+      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 60;
+      const kickG = ctx.createGain(); kickG.gain.value = 0;
+      kick.connect(kickG); kickG.connect(master);
+      // F minor — aggressive, competitive, EDM
+      const mel = [349,392,415,466,523,622,523,466,415,392,349,330,311,330,349,392,415,523,622,698,622,523,466,415];
+      const basN = [44,44,44,44,49,49,49,49,52,52,52,52,49,49,49,49,44,44,44,44,41,41,41,41];
+      let step = 0, buildUp = 0;
+      synth.frequency.value = mel[0]; sub.frequency.value = basN[0]; lead.frequency.value = mel[0] * 2;
+      synth.start(now); sub.start(now); lead.start(now); kick.start(now);
+      musicNodes = [synth, sub, lead, kick, master, synthG, subG, leadG, kickG, synthF, leadF];
+      musicTimers.push(setInterval(() => { try {
+        step = (step+1) % mel.length;
+        buildUp = (buildUp + 1) % 48;
+        const t = ctx.currentTime;
+        synth.frequency.setValueAtTime(mel[step], t);
+        sub.frequency.setValueAtTime(basN[step], t);
+        lead.frequency.setValueAtTime(mel[step] * 2, t);
+        // Build-up: filter rises then drops
+        const buildPct = buildUp / 48;
+        synthF.frequency.setValueAtTime(800 + buildPct * 4000, t);
+        synthG.gain.setValueAtTime(0.04 + buildPct * 0.06, t); synthG.gain.linearRampToValueAtTime(0.02, t + 0.1);
+        // Drop at build peak
+        if (buildUp === 0) { subG.gain.setValueAtTime(0.35, t); subG.gain.exponentialRampToValueAtTime(0.001, t + 0.4); leadG.gain.setValueAtTime(0.05, t); leadG.gain.linearRampToValueAtTime(0, t + 0.3); }
+        // Kick pattern — four on floor with extra hits
+        if (step % 2 === 0) { kickG.gain.setValueAtTime(0.25, t); kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.1); kick.frequency.setValueAtTime(80, t); kick.frequency.exponentialRampToValueAtTime(35, t + 0.08); }
+      } catch(e) {} }, 140));
+    }
+
+    else if (type === 'about') {
+      // ABOUT: Gospel soul — warm keys, choir pad, heartbeat, shimmering highs
+      const keys = ctx.createOscillator(); keys.type = 'triangle';
+      const keysG = ctx.createGain(); keysG.gain.value = 0;
+      keys.connect(keysG); keysG.connect(master);
+      const choir1 = ctx.createOscillator(); choir1.type = 'sine';
+      const choir2 = ctx.createOscillator(); choir2.type = 'sine'; choir2.detune.value = 7;
+      const choir3 = ctx.createOscillator(); choir3.type = 'sine'; choir3.detune.value = -5;
+      const choirG = ctx.createGain(); choirG.gain.value = 0.08;
+      const choirF = ctx.createBiquadFilter(); choirF.type = 'lowpass'; choirF.frequency.value = 800;
+      choir1.connect(choirF); choir2.connect(choirF); choir3.connect(choirF); choirF.connect(choirG); choirG.connect(master);
+      const shimmer = ctx.createOscillator(); shimmer.type = 'sine';
+      const shimG = ctx.createGain(); shimG.gain.value = 0;
+      const shimDelay = ctx.createDelay(); shimDelay.delayTime.value = 0.5;
+      const shimDelayG = ctx.createGain(); shimDelayG.gain.value = 0.25;
+      shimmer.connect(shimG); shimG.connect(master); shimG.connect(shimDelay); shimDelay.connect(shimDelayG); shimDelayG.connect(master); shimDelayG.connect(shimDelay);
+      const bass = ctx.createOscillator(); bass.type = 'sine';
+      const bassG = ctx.createGain(); bassG.gain.value = 0.2;
+      bass.connect(bassG); bassG.connect(master);
+      const heartbeat = ctx.createOscillator(); heartbeat.type = 'sine'; heartbeat.frequency.value = 45;
+      const hbG = ctx.createGain(); hbG.gain.value = 0;
+      heartbeat.connect(hbG); hbG.connect(master);
+      // Ab major — the most soulful, emotional, gospel key
+      const chords = [208,233,262,277,311,330,311,277,262,233,208,196,185,196,208,233];
+      const melody = [415,466,523,554,622,659,622,554,523,466,415,392,370,392,415,466];
+      const shims = [831,932,1047,1109,1245,1319,1245,1109,1047,932,831,784];
+      const basNotes = [52,52,58,58,65,65,58,58,52,52,49,49,46,46,52,52];
+      let step = 0;
+      keys.frequency.value = melody[0]; choir1.frequency.value = chords[0]; choir2.frequency.value = chords[0]; choir3.frequency.value = chords[0] * 0.5;
+      shimmer.frequency.value = shims[0]; bass.frequency.value = basNotes[0];
+      keys.start(now); choir1.start(now); choir2.start(now); choir3.start(now); shimmer.start(now); bass.start(now); heartbeat.start(now);
+      musicNodes = [keys, choir1, choir2, choir3, shimmer, bass, heartbeat, master, keysG, choirG, shimG, bassG, hbG, choirF, shimDelay, shimDelayG];
+      musicTimers.push(setInterval(() => { try {
+        step = (step+1) % chords.length;
+        const t = ctx.currentTime;
+        choir1.frequency.linearRampToValueAtTime(chords[step], t + 2);
+        choir2.frequency.linearRampToValueAtTime(chords[step], t + 2.3);
+        choir3.frequency.linearRampToValueAtTime(chords[step] * 0.5, t + 2.5);
+        bass.frequency.linearRampToValueAtTime(basNotes[step], t + 1.5);
+        keys.frequency.setValueAtTime(melody[step], t);
+        keysG.gain.setValueAtTime(0.1, t); keysG.gain.linearRampToValueAtTime(0.02, t + 1.2);
+        if (step % 2 === 0) { shimmer.frequency.setValueAtTime(shims[step % shims.length], t); shimG.gain.setValueAtTime(0.035, t); shimG.gain.linearRampToValueAtTime(0, t + 2); }
+        if (step % 4 === 0) { hbG.gain.setValueAtTime(0.1, t); hbG.gain.exponentialRampToValueAtTime(0.001, t + 0.25); }
+        choirF.frequency.linearRampToValueAtTime(500 + melody[step] * 0.8, t + 1);
+      } catch(e) {} }, 1500));
+    }
+
+    else if (type === 'boss') {
+      // BOSS: Metal/epic — distorted power chords, double bass drum, screaming lead
+      const power = ctx.createOscillator(); power.type = 'sawtooth';
+      const power2 = ctx.createOscillator(); power2.type = 'sawtooth'; power2.detune.value = -1200; // octave down
+      const powG = ctx.createGain(); powG.gain.value = 0.06;
+      const powF = ctx.createBiquadFilter(); powF.type = 'lowpass'; powF.frequency.value = 1500;
+      const dist = ctx.createWaveShaper();
+      const curve = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = (i/128) - 1; curve[i] = (Math.PI + 4) * x / (Math.PI + 4 * Math.abs(x)); }
+      dist.curve = curve;
+      power.connect(dist); power2.connect(dist); dist.connect(powF); powF.connect(powG); powG.connect(master);
+      const lead = ctx.createOscillator(); lead.type = 'square';
+      const leadG = ctx.createGain(); leadG.gain.value = 0;
+      const leadF = ctx.createBiquadFilter(); leadF.type = 'lowpass'; leadF.frequency.value = 2500;
+      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
+      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 50;
+      const kickG = ctx.createGain(); kickG.gain.value = 0;
+      kick.connect(kickG); kickG.connect(master);
+      // E minor power — dark, heavy, boss energy
+      const riff = [82,82,98,82,110,98,82,73,82,82,98,110,131,110,98,82,65,65,73,82,98,82,73,65];
+      const soloN = [330,392,440,494,523,587,523,494,440,392,330,294,262,294,330,392,440,523,587,659,587,523,440,392];
+      let step = 0;
+      power.frequency.value = riff[0]; power2.frequency.value = riff[0]; lead.frequency.value = soloN[0];
+      power.start(now); power2.start(now); lead.start(now); kick.start(now);
+      musicNodes = [power, power2, lead, kick, master, powG, leadG, kickG, powF, leadF, dist];
+      musicTimers.push(setInterval(() => { try {
+        step = (step+1) % riff.length;
+        const t = ctx.currentTime;
+        power.frequency.setValueAtTime(riff[step], t);
+        power2.frequency.setValueAtTime(riff[step], t);
+        lead.frequency.setValueAtTime(soloN[step], t);
+        powG.gain.setValueAtTime(0.08, t); powG.gain.linearRampToValueAtTime(0.04, t + 0.08);
+        leadG.gain.setValueAtTime(0.06, t); leadG.gain.linearRampToValueAtTime(0.02, t + 0.1);
+        // Double bass — kick every step
+        kickG.gain.setValueAtTime(0.3, t); kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+        kick.frequency.setValueAtTime(90, t); kick.frequency.exponentialRampToValueAtTime(30, t + 0.08);
+        // Extra hard hit every 4
+        if (step % 4 === 0) { powF.frequency.setValueAtTime(2500, t); powF.frequency.linearRampToValueAtTime(1200, t + 0.2); }
+      } catch(e) {} }, 130));
+    }
+
+    else if (type === 'gameplay') {
+      // SINGLEPLAYER: Sneaky chase — tension, driving bass, suspenseful arpeggios
+      const arp = ctx.createOscillator(); arp.type = 'sine';
+      const arpG = ctx.createGain(); arpG.gain.value = 0;
+      const arpDelay = ctx.createDelay(); arpDelay.delayTime.value = 0.25;
+      const arpDelayG = ctx.createGain(); arpDelayG.gain.value = 0.2;
+      arp.connect(arpG); arpG.connect(master); arpG.connect(arpDelay); arpDelay.connect(arpDelayG); arpDelayG.connect(master);
+      const bass = ctx.createOscillator(); bass.type = 'triangle';
+      const bassG = ctx.createGain(); bassG.gain.value = 0.25;
+      bass.connect(bassG); bassG.connect(master);
+      const tension = ctx.createOscillator(); tension.type = 'sawtooth';
+      const tensG = ctx.createGain(); tensG.gain.value = 0.02;
+      const tensF = ctx.createBiquadFilter(); tensF.type = 'lowpass'; tensF.frequency.value = 400;
+      tension.connect(tensF); tensF.connect(tensG); tensG.connect(master);
+      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 55;
+      const kickG = ctx.createGain(); kickG.gain.value = 0;
+      kick.connect(kickG); kickG.connect(master);
+      // C minor — tense, sneaky, the hunt
+      const notes = [262,311,330,392,523,392,330,311,262,247,233,247,262,330,392,523,622,523,392,330,311,262,247,233];
+      const basN = [65,65,65,65,78,78,78,78,82,82,82,82,78,78,78,78,65,65,65,65,58,58,58,58];
+      let step = 0;
+      arp.frequency.value = notes[0]; bass.frequency.value = basN[0]; tension.frequency.value = 65;
+      arp.start(now); bass.start(now); tension.start(now); kick.start(now);
+      musicNodes = [arp, bass, tension, kick, master, arpG, bassG, tensG, kickG, tensF, arpDelay, arpDelayG];
       musicTimers.push(setInterval(() => { try {
         step = (step+1) % notes.length;
         const t = ctx.currentTime;
         arp.frequency.setValueAtTime(notes[step], t);
-        sub.frequency.setValueAtTime(bassN[step], t);
-        arpG.gain.setValueAtTime(0.22, t);
-        arpG.gain.linearRampToValueAtTime(0.08, t + 0.2);
-        if (step % 4 === 0) { padF.frequency.linearRampToValueAtTime(600, t + 0.5); padF.frequency.linearRampToValueAtTime(300, t + 1); }
-        if (step % 8 === 0) { subG.gain.setValueAtTime(0.4, t); subG.gain.linearRampToValueAtTime(0.25, t + 0.3); }
-      } catch(e) {} }, 280));
-    }
-
-    else if (type === 'leaderboard') {
-      // LEADERBOARD: Hype/competitive — fast tempo, energetic, rising tension
-      const lead = ctx.createOscillator(); lead.type = 'square';
-      const leadG = ctx.createGain(); leadG.gain.value = 0.1;
-      const leadF = ctx.createBiquadFilter(); leadF.type = 'lowpass'; leadF.frequency.value = 2500;
-      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
-      const bass = ctx.createOscillator(); bass.type = 'triangle';
-      const bassG = ctx.createGain(); bassG.gain.value = 0.3;
-      bass.connect(bassG); bassG.connect(master);
-      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 55;
-      const kickG = ctx.createGain(); kickG.gain.value = 0;
-      kick.connect(kickG); kickG.connect(master);
-      const snare = ctx.createOscillator(); snare.type = 'sawtooth'; snare.frequency.value = 200;
-      const snareG = ctx.createGain(); snareG.gain.value = 0;
-      const snareF = ctx.createBiquadFilter(); snareF.type = 'highpass'; snareF.frequency.value = 1000;
-      snare.connect(snareF); snareF.connect(snareG); snareG.connect(master);
-      // A minor fast — competitive energy
-      const mel = [440,523,587,659,880,659,587,523,440,392,349,392,440,523,587,659,784,659,587,523,440,392,349,330];
-      const basN = [110,110,110,110,131,131,131,131,147,147,147,147,131,131,131,131,110,110,110,110,98,98,98,98];
-      let step = 0;
-      lead.frequency.value = mel[0]; bass.frequency.value = basN[0];
-      lead.start(now); bass.start(now); kick.start(now); snare.start(now);
-      musicNodes = [lead, bass, kick, snare, master, leadG, bassG, kickG, snareG, leadF, snareF];
-      musicTimers.push(setInterval(() => { try {
-        step = (step+1) % mel.length;
-        const t = ctx.currentTime;
-        lead.frequency.setValueAtTime(mel[step], t);
         bass.frequency.setValueAtTime(basN[step], t);
-        leadG.gain.setValueAtTime(0.14, t);
-        leadG.gain.linearRampToValueAtTime(0.06, t + 0.1);
-        if (step % 3 === 0) { kickG.gain.setValueAtTime(0.3, t); kickG.gain.exponentialRampToValueAtTime(0.001, t+0.12); kick.frequency.setValueAtTime(90, t); kick.frequency.exponentialRampToValueAtTime(40, t+0.1); }
-        if (step % 6 === 3) { snareG.gain.setValueAtTime(0.15, t); snareG.gain.exponentialRampToValueAtTime(0.001, t+0.08); }
-      } catch(e) {} }, 150));
-    }
-
-    else if (type === 'about') {
-      // ABOUT PAGE: Soulful, emotional, fire — gospel deserves the best track
-      // Layers: warm pad chorus, soul piano melody, deep bass, gentle kick, shimmering high
-      const pad1 = ctx.createOscillator(); pad1.type = 'sine';
-      const pad2 = ctx.createOscillator(); pad2.type = 'sine'; pad2.detune.value = 8;
-      const pad3 = ctx.createOscillator(); pad3.type = 'triangle'; pad3.detune.value = -5;
-      const padG = ctx.createGain(); padG.gain.value = 0.1;
-      const padF = ctx.createBiquadFilter(); padF.type = 'lowpass'; padF.frequency.value = 900;
-      pad1.connect(padF); pad2.connect(padF); pad3.connect(padF); padF.connect(padG); padG.connect(master);
-      // Soul melody — triangle for that warm piano feel
-      const mel = ctx.createOscillator(); mel.type = 'triangle';
-      const melG = ctx.createGain(); melG.gain.value = 0;
-      mel.connect(melG); melG.connect(master);
-      // Shimmer — high sine with delay feel
-      const shim = ctx.createOscillator(); shim.type = 'sine';
-      const shimG = ctx.createGain(); shimG.gain.value = 0;
-      const shimDelay = ctx.createDelay(); shimDelay.delayTime.value = 0.4;
-      const shimDelayG = ctx.createGain(); shimDelayG.gain.value = 0.2;
-      shim.connect(shimG); shimG.connect(master); shimG.connect(shimDelay); shimDelay.connect(shimDelayG); shimDelayG.connect(master);
-      // Deep bass
-      const bass = ctx.createOscillator(); bass.type = 'sine';
-      const bassG = ctx.createGain(); bassG.gain.value = 0.25;
-      bass.connect(bassG); bassG.connect(master);
-      // Gentle heartbeat kick
-      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 50;
-      const kickG = ctx.createGain(); kickG.gain.value = 0;
-      kick.connect(kickG); kickG.connect(master);
-      // Ab major — soulful, uplifting, emotional (gospel key)
-      const chords = [208,233,262,277,311,330,311,277,262,233,208,196,208,233,262,311];
-      const melody = [523,587,622,698,784,830,784,698,622,587,523,494,523,587,622,698];
-      const shimNotes = [1047,1175,1245,1397,1568,1397,1245,1175,1047,988,1047,1175,1245,1397,1568,1661];
-      const bassN = [104,104,116,116,131,131,116,116,104,104,98,98,104,104,116,116];
-      let step = 0;
-      pad1.frequency.value = chords[0]; pad2.frequency.value = chords[0]; pad3.frequency.value = chords[0];
-      mel.frequency.value = melody[0]; shim.frequency.value = shimNotes[0]; bass.frequency.value = bassN[0];
-      pad1.start(now); pad2.start(now); pad3.start(now); mel.start(now); shim.start(now); bass.start(now); kick.start(now);
-      musicNodes = [pad1, pad2, pad3, mel, shim, bass, kick, master, padG, melG, shimG, bassG, kickG, padF, shimDelay, shimDelayG];
-      musicTimers.push(setInterval(() => { try {
-        step = (step+1) % chords.length;
-        const t = ctx.currentTime;
-        // Smooth chord glide
-        pad1.frequency.linearRampToValueAtTime(chords[step], t + 2);
-        pad2.frequency.linearRampToValueAtTime(chords[step], t + 2.3);
-        pad3.frequency.linearRampToValueAtTime(chords[step] * 0.5, t + 2.5);
-        bass.frequency.linearRampToValueAtTime(bassN[step], t + 1.5);
-        // Melody — plucky soul piano
-        mel.frequency.setValueAtTime(melody[step], t);
-        melG.gain.setValueAtTime(0.1, t);
-        melG.gain.linearRampToValueAtTime(0.02, t + 1);
-        // Shimmer — high sparkle with echo
-        if (step % 2 === 0) {
-          shim.frequency.setValueAtTime(shimNotes[step], t);
-          shimG.gain.setValueAtTime(0.04, t);
-          shimG.gain.linearRampToValueAtTime(0, t + 1.5);
-        }
-        // Heartbeat kick every 4th beat
-        if (step % 4 === 0) {
-          kickG.gain.setValueAtTime(0.12, t);
-          kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-          kick.frequency.setValueAtTime(60, t);
-          kick.frequency.exponentialRampToValueAtTime(30, t + 0.15);
-        }
-        // Filter breathes — opens on high notes
-        padF.frequency.linearRampToValueAtTime(600 + melody[step] * 0.5, t + 1);
-      } catch(e) {} }, 1200));
-    }
-
-    else if (type === 'boss') {
-      // BOSS FIGHT: Epic, intense, heavy — Garry demands respect
-      const lead = ctx.createOscillator(); lead.type = 'sawtooth';
-      const leadG = ctx.createGain(); leadG.gain.value = 0.08;
-      const leadF = ctx.createBiquadFilter(); leadF.type = 'lowpass'; leadF.frequency.value = 2000;
-      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
-      const bass = ctx.createOscillator(); bass.type = 'square';
-      const bassG = ctx.createGain(); bassG.gain.value = 0.2;
-      const bassF = ctx.createBiquadFilter(); bassF.type = 'lowpass'; bassF.frequency.value = 300;
-      bass.connect(bassF); bassF.connect(bassG); bassG.connect(master);
-      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 50;
-      const kickG = ctx.createGain(); kickG.gain.value = 0;
-      kick.connect(kickG); kickG.connect(master);
-      const alarm = ctx.createOscillator(); alarm.type = 'sine';
-      const alarmG = ctx.createGain(); alarmG.gain.value = 0;
-      alarm.connect(alarmG); alarmG.connect(master);
-      // E minor HEAVY — boss fight energy
-      const mel = [164,196,233,262,311,330,311,262,233,196,164,147,131,147,164,196,233,311,330,392,330,311,262,233];
-      const basN = [41,41,41,41,49,49,49,49,55,55,55,55,49,49,49,49,41,41,41,41,37,37,37,37];
-      let step = 0;
-      lead.frequency.value = mel[0]; bass.frequency.value = basN[0]; alarm.frequency.value = 880;
-      lead.start(now); bass.start(now); kick.start(now); alarm.start(now);
-      musicNodes = [lead, bass, kick, alarm, master, leadG, bassG, kickG, alarmG, leadF, bassF];
-      musicTimers.push(setInterval(() => { try {
-        step = (step+1) % mel.length;
-        const t = ctx.currentTime;
-        lead.frequency.setValueAtTime(mel[step], t);
-        bass.frequency.setValueAtTime(basN[step], t);
-        leadG.gain.setValueAtTime(0.12, t);
-        leadG.gain.linearRampToValueAtTime(0.05, t + 0.1);
-        // Heavy double kick
-        if (step % 2 === 0) { kickG.gain.setValueAtTime(0.35, t); kickG.gain.exponentialRampToValueAtTime(0.001, t+0.12); kick.frequency.setValueAtTime(90, t); kick.frequency.exponentialRampToValueAtTime(30, t+0.1); }
-        if (step % 2 === 1) { kickG.gain.setValueAtTime(0.2, t); kickG.gain.exponentialRampToValueAtTime(0.001, t+0.08); }
-        // Warning alarm on phase changes
-        if (step % 12 === 0) { alarmG.gain.setValueAtTime(0.04, t); alarmG.gain.linearRampToValueAtTime(0, t + 0.3); }
-        // Aggressive filter
-        leadF.frequency.setValueAtTime(1500 + Math.sin(t * 2) * 800, t);
-      } catch(e) {} }, 160));
-    }
-
-    else if (type === 'gameplay') {
-      // GAMEPLAY: Tense chase — driving beat, minor key tension, building intensity
-      const lead = ctx.createOscillator(); lead.type = 'sawtooth';
-      const leadG = ctx.createGain(); leadG.gain.value = 0.06;
-      const leadF = ctx.createBiquadFilter(); leadF.type = 'lowpass'; leadF.frequency.value = 1800;
-      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
-      const bass = ctx.createOscillator(); bass.type = 'triangle';
-      const bassG = ctx.createGain(); bassG.gain.value = 0.3;
-      bass.connect(bassG); bassG.connect(master);
-      const perc = ctx.createOscillator(); perc.type = 'square';
-      const percG = ctx.createGain(); percG.gain.value = 0;
-      const percF = ctx.createBiquadFilter(); percF.type = 'bandpass'; percF.frequency.value = 800;
-      perc.connect(percF); percF.connect(percG); percG.connect(master);
-      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 55;
-      const kickG = ctx.createGain(); kickG.gain.value = 0;
-      kick.connect(kickG); kickG.connect(master);
-      // C minor chase — urgent, sneaky, intense
-      const mel = [262,294,311,349,392,349,311,294,262,247,233,247,262,311,349,392,440,392,349,311,294,262,247,233];
-      const basN = [65,65,65,65,73,73,73,73,78,78,78,78,73,73,73,73,65,65,65,65,58,58,58,58];
-      let step = 0;
-      lead.frequency.value = mel[0]; bass.frequency.value = basN[0]; perc.frequency.value = 400;
-      lead.start(now); bass.start(now); perc.start(now); kick.start(now);
-      musicNodes = [lead, bass, perc, kick, master, leadG, bassG, percG, kickG, leadF, percF];
-      musicTimers.push(setInterval(() => { try {
-        step = (step+1) % mel.length;
-        const t = ctx.currentTime;
-        lead.frequency.setValueAtTime(mel[step], t);
-        bass.frequency.setValueAtTime(basN[step], t);
-        leadG.gain.setValueAtTime(0.08, t);
-        leadG.gain.linearRampToValueAtTime(0.04, t + 0.12);
-        // Driving kick — every 2nd step
-        if (step % 2 === 0) { kickG.gain.setValueAtTime(0.22, t); kickG.gain.exponentialRampToValueAtTime(0.001, t+0.1); kick.frequency.setValueAtTime(75, t); kick.frequency.exponentialRampToValueAtTime(35, t+0.08); }
-        // Percussion hits
-        if (step % 3 === 0) { percG.gain.setValueAtTime(0.06, t); percG.gain.exponentialRampToValueAtTime(0.001, t+0.06); }
-        // Filter sweep for tension
-        leadF.frequency.linearRampToValueAtTime(1200 + Math.sin(t * 0.8) * 600, t + 0.5);
-      } catch(e) {} }, 180));
+        arpG.gain.setValueAtTime(0.08, t); arpG.gain.linearRampToValueAtTime(0.02, t + 0.15);
+        if (step % 3 === 0) { kickG.gain.setValueAtTime(0.2, t); kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.12); kick.frequency.setValueAtTime(70, t); kick.frequency.exponentialRampToValueAtTime(35, t + 0.08); }
+        tensF.frequency.setValueAtTime(300 + Math.sin(t * 0.5) * 200, t);
+      } catch(e) {} }, 200));
     }
 
     else if (type === 'mpgame') {
-      // MULTIPLAYER GAMEPLAY: High energy party — funky, bouncy, everyone's hyped
-      const lead = ctx.createOscillator(); lead.type = 'square';
-      const leadG = ctx.createGain(); leadG.gain.value = 0.07;
-      const leadF = ctx.createBiquadFilter(); leadF.type = 'lowpass'; leadF.frequency.value = 2200;
-      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
-      const bass = ctx.createOscillator(); bass.type = 'sine';
-      const bassG = ctx.createGain(); bassG.gain.value = 0.35;
-      bass.connect(bassG); bassG.connect(master);
-      const funk = ctx.createOscillator(); funk.type = 'triangle';
+      // MULTIPLAYER: High energy party — funky bass, wah synth, crowd energy
+      const wah = ctx.createOscillator(); wah.type = 'sawtooth';
+      const wahG = ctx.createGain(); wahG.gain.value = 0;
+      const wahF = ctx.createBiquadFilter(); wahF.type = 'bandpass'; wahF.frequency.value = 1000; wahF.Q.value = 5;
+      wah.connect(wahF); wahF.connect(wahG); wahG.connect(master);
+      const funk = ctx.createOscillator(); funk.type = 'square';
       const funkG = ctx.createGain(); funkG.gain.value = 0;
-      funk.connect(funkG); funkG.connect(master);
+      const funkF = ctx.createBiquadFilter(); funkF.type = 'lowpass'; funkF.frequency.value = 2000;
+      funk.connect(funkF); funkF.connect(funkG); funkG.connect(master);
+      const bass = ctx.createOscillator(); bass.type = 'sine';
+      const bassG = ctx.createGain(); bassG.gain.value = 0.3;
+      bass.connect(bassG); bassG.connect(master);
       const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 55;
       const kickG = ctx.createGain(); kickG.gain.value = 0;
       kick.connect(kickG); kickG.connect(master);
-      const hat = ctx.createOscillator(); hat.type = 'sawtooth'; hat.frequency.value = 3000;
-      const hatG = ctx.createGain(); hatG.gain.value = 0;
-      const hatF = ctx.createBiquadFilter(); hatF.type = 'highpass'; hatF.frequency.value = 2000;
-      hat.connect(hatF); hatF.connect(hatG); hatG.connect(master);
-      // G major funky — bouncy party energy
+      const clap = ctx.createOscillator(); clap.type = 'sawtooth'; clap.frequency.value = 1500;
+      const clapG = ctx.createGain(); clapG.gain.value = 0;
+      const clapF = ctx.createBiquadFilter(); clapF.type = 'highpass'; clapF.frequency.value = 800;
+      clap.connect(clapF); clapF.connect(clapG); clapG.connect(master);
+      // G major funky — party vibes, everyone's hyped
       const mel = [392,440,494,523,587,659,587,523,494,440,392,349,330,349,392,440,494,587,659,784,659,587,523,494];
       const basN = [98,98,110,110,123,123,110,110,98,98,87,87,82,82,98,98,110,110,123,123,110,110,98,98];
-      const funkN = [784,880,988,1047,1175,1047,988,880];
       let step = 0;
-      lead.frequency.value = mel[0]; bass.frequency.value = basN[0]; funk.frequency.value = funkN[0];
-      lead.start(now); bass.start(now); funk.start(now); kick.start(now); hat.start(now);
-      musicNodes = [lead, bass, funk, kick, hat, master, leadG, bassG, funkG, kickG, hatG, leadF, hatF];
+      wah.frequency.value = mel[0]; funk.frequency.value = mel[0] * 2; bass.frequency.value = basN[0];
+      wah.start(now); funk.start(now); bass.start(now); kick.start(now); clap.start(now);
+      musicNodes = [wah, funk, bass, kick, clap, master, wahG, funkG, bassG, kickG, clapG, wahF, funkF, clapF];
       musicTimers.push(setInterval(() => { try {
         step = (step+1) % mel.length;
         const t = ctx.currentTime;
-        lead.frequency.setValueAtTime(mel[step], t);
+        wah.frequency.setValueAtTime(mel[step], t);
+        funk.frequency.setValueAtTime(mel[step] * 2, t);
         bass.frequency.setValueAtTime(basN[step], t);
-        funk.frequency.setValueAtTime(funkN[step % funkN.length], t);
-        // Plucky lead
-        leadG.gain.setValueAtTime(0.1, t);
-        leadG.gain.linearRampToValueAtTime(0.04, t + 0.1);
-        // Funky stab every 3rd beat
-        if (step % 3 === 0) { funkG.gain.setValueAtTime(0.06, t); funkG.gain.exponentialRampToValueAtTime(0.001, t + 0.08); }
-        // Four on the floor kick
-        if (step % 2 === 0) { kickG.gain.setValueAtTime(0.25, t); kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.12); kick.frequency.setValueAtTime(80, t); kick.frequency.exponentialRampToValueAtTime(35, t + 0.08); }
-        // Offbeat hi-hat
-        if (step % 2 === 1) { hatG.gain.setValueAtTime(0.03, t); hatG.gain.exponentialRampToValueAtTime(0.001, t + 0.04); }
-        // Filter envelope — opens up on high notes
-        leadF.frequency.setValueAtTime(1500 + mel[step] * 2, t);
-      } catch(e) {} }, 170));
+        // Wah effect — filter sweeps on each note
+        wahF.frequency.setValueAtTime(2000, t); wahF.frequency.linearRampToValueAtTime(500, t + 0.12);
+        wahG.gain.setValueAtTime(0.05, t); wahG.gain.linearRampToValueAtTime(0.01, t + 0.1);
+        // Funk stabs
+        if (step % 3 === 0) { funkG.gain.setValueAtTime(0.04, t); funkG.gain.exponentialRampToValueAtTime(0.001, t + 0.06); }
+        // Four on floor + clap on 2 and 4
+        if (step % 2 === 0) { kickG.gain.setValueAtTime(0.25, t); kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.1); kick.frequency.setValueAtTime(80, t); kick.frequency.exponentialRampToValueAtTime(35, t + 0.08); }
+        if (step % 4 === 2) { clapG.gain.setValueAtTime(0.06, t); clapG.gain.exponentialRampToValueAtTime(0.001, t + 0.05); }
+      } catch(e) {} }, 160));
     }
 
     else {
-      // LOBBY: Chill but building — lo-fi with a groove, head-nodding beat
+      // LOBBY: Lo-fi chill — vinyl crackle feel, mellow keys, slow groove
+      const keys = ctx.createOscillator(); keys.type = 'triangle';
+      const keysG = ctx.createGain(); keysG.gain.value = 0;
+      keys.connect(keysG); keysG.connect(master);
       const pad1 = ctx.createOscillator(); pad1.type = 'sine';
       const pad2 = ctx.createOscillator(); pad2.type = 'sine'; pad2.detune.value = 6;
-      const padG = ctx.createGain(); padG.gain.value = 0.12;
+      const padG = ctx.createGain(); padG.gain.value = 0.1;
       const padF = ctx.createBiquadFilter(); padF.type = 'lowpass'; padF.frequency.value = 600;
       pad1.connect(padF); pad2.connect(padF); padF.connect(padG); padG.connect(master);
       const bass = ctx.createOscillator(); bass.type = 'triangle';
-      const bassG = ctx.createGain(); bassG.gain.value = 0.35;
+      const bassG = ctx.createGain(); bassG.gain.value = 0.25;
       bass.connect(bassG); bassG.connect(master);
-      const pluck = ctx.createOscillator(); pluck.type = 'square';
-      const pluckG = ctx.createGain(); pluckG.gain.value = 0;
-      const pluckF = ctx.createBiquadFilter(); pluckF.type = 'lowpass'; pluckF.frequency.value = 1200;
-      pluck.connect(pluckF); pluckF.connect(pluckG); pluckG.connect(master);
-      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 55;
+      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 50;
       const kickG = ctx.createGain(); kickG.gain.value = 0;
       kick.connect(kickG); kickG.connect(master);
-      // D minor groove — head nodding, waiting room vibes
-      const chords = [147,175,196,233,262,233,196,175];
-      const basN =   [73,73,87,87,98,98,87,87];
-      const pluckN = [587,698,784,932,1047,932,784,698];
+      // D minor — mellow, chill, waiting room vibes
+      const chords = [147,165,175,196,220,233,220,196];
+      const melody = [587,659,698,784,880,932,880,784];
+      const basN = [73,73,87,87,98,98,87,87];
       let step = 0;
-      pad1.frequency.value = chords[0]; pad2.frequency.value = chords[0]; bass.frequency.value = basN[0]; pluck.frequency.value = pluckN[0];
-      pad1.start(now); pad2.start(now); bass.start(now); pluck.start(now); kick.start(now);
-      musicNodes = [pad1, pad2, bass, pluck, kick, master, padG, bassG, pluckG, kickG, padF, pluckF];
+      pad1.frequency.value = chords[0]; pad2.frequency.value = chords[0]; keys.frequency.value = melody[0]; bass.frequency.value = basN[0];
+      pad1.start(now); pad2.start(now); keys.start(now); bass.start(now); kick.start(now);
+      musicNodes = [pad1, pad2, keys, bass, kick, master, padG, keysG, bassG, kickG, padF];
       musicTimers.push(setInterval(() => { try {
         step = (step+1) % chords.length;
         const t = ctx.currentTime;
-        pad1.frequency.linearRampToValueAtTime(chords[step], t + 1);
-        pad2.frequency.linearRampToValueAtTime(chords[step], t + 1.2);
+        pad1.frequency.linearRampToValueAtTime(chords[step], t + 2);
+        pad2.frequency.linearRampToValueAtTime(chords[step], t + 2.3);
         bass.frequency.setValueAtTime(basN[step], t);
-        // Pluck every other beat
-        if (step % 2 === 0) { pluck.frequency.setValueAtTime(pluckN[step], t); pluckG.gain.setValueAtTime(0.08, t); pluckG.gain.linearRampToValueAtTime(0, t + 0.4); }
-        // Kick every beat
-        kickG.gain.setValueAtTime(0.2, t); kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-        kick.frequency.setValueAtTime(70, t); kick.frequency.exponentialRampToValueAtTime(35, t + 0.1);
-        // Filter wobble
-        padF.frequency.linearRampToValueAtTime(400 + Math.sin(t * 0.5) * 200, t + 1);
-      } catch(e) {} }, 500));
+        keys.frequency.setValueAtTime(melody[step], t);
+        keysG.gain.setValueAtTime(0.08, t); keysG.gain.linearRampToValueAtTime(0, t + 1.5);
+        // Slow kick
+        kickG.gain.setValueAtTime(0.15, t); kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        kick.frequency.setValueAtTime(60, t); kick.frequency.exponentialRampToValueAtTime(30, t + 0.15);
+        padF.frequency.linearRampToValueAtTime(400 + Math.sin(t * 0.3) * 200, t + 1);
+      } catch(e) {} }, 600));
     }
 
   } catch(e) {}
@@ -5572,17 +5555,13 @@ function startMusic(type) {
 function stopMusic() {
   musicTimers.forEach(t => clearInterval(t));
   musicTimers = [];
-  if (window._musicInterval) { clearInterval(window._musicInterval); window._musicInterval = null; }
-  // Smooth fade out — find the master gain (first GainNode in the list)
   const nodesToStop = [...musicNodes];
   try {
     const ctx = ensureAudio();
     const t = ctx.currentTime;
-    // Fade ALL gain nodes to 0
     nodesToStop.forEach(n => {
       try { if (n.gain && typeof n.gain.linearRampToValueAtTime === 'function') n.gain.linearRampToValueAtTime(0, t + 0.8); } catch(e) {}
     });
-    // Stop oscillators after fade completes
     setTimeout(() => {
       nodesToStop.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
     }, 900);
