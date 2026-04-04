@@ -4990,19 +4990,46 @@ function mpGameTick() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   } else {
     drawBackground();
-    // Draw CPU snails using EXACT singleplayer drawSnailAt
-    mpCpuSnailObjects.forEach(s => { if (s.alive) drawSnailAt(s); });
-    // Draw remote human snails
+    // Draw CPU snails using EXACT singleplayer drawSnailAt + rarity label
+    mpCpuSnailObjects.forEach(s => {
+      if (!s.alive) return;
+      drawSnailAt(s);
+      // Show rarity name below snail
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 9px sans-serif';
+      const rar = s.rarity || rarities[s.rarityIdx || 0];
+      ctx.fillStyle = rar?.color || '#888';
+      ctx.globalAlpha = 0.6;
+      ctx.fillText(rar?.name || '', s.x, s.y + 20);
+      ctx.restore();
+    });
+    // Draw human snails (remote + local player)
+    const drawnUids = new Set();
+    // Draw local player's snail first (always, no Firebase delay)
+    if (mpRole === 'snail' && mpMySnailData && mpMySnailData.alive) {
+      if (!mpMySnailData._renderSnail) {
+        mpMySnailData._renderSnail = { trail: [], hue: mpMySnailData.hue || 0, type: mpMySnailData.type,
+          saturation: (mpMySnailData.type === 'Shadow' || mpMySnailData.type === 'Ghost' || mpMySnailData.type === 'Ninja') ? 10 : undefined,
+          rarity: rarities[mpMySnailData.rarityIdx || 0], rarityIdx: mpMySnailData.rarityIdx || 0 };
+      }
+      const rs = mpMySnailData._renderSnail;
+      rs.x = mpMySnailData.x; rs.y = mpMySnailData.y; rs.angle = mpMySnailData.angle || 0;
+      rs.ghostVisible = mpMySnailData.ghostVisible !== false;
+      if (time % 3 === 0) { rs.trail.push({ x: rs.x, y: rs.y, alpha: 0.4 }); if (rs.trail.length > 100) rs.trail.shift(); }
+      drawSnailAt(rs);
+      if (fbUser) drawnUids.add(fbUser.uid);
+    }
+    // Draw other human snails from Firebase
     Object.entries(mpRemoteSnails).forEach(([uid, s]) => {
-      if (!s.alive || s.isCpu) return;
-      const renderS = (fbUser && uid === fbUser.uid && mpMySnailData) ? mpMySnailData : s;
+      if (!s.alive || s.isCpu || drawnUids.has(uid)) return;
       if (!s._renderSnail) {
         s._renderSnail = { trail: [], hue: s.hue || 0, type: s.type,
           saturation: (s.type === 'Shadow' || s.type === 'Ghost' || s.type === 'Ninja') ? 10 : undefined,
           rarity: rarities[s.rarityIdx || 0], rarityIdx: s.rarityIdx || 0 };
       }
       const rs = s._renderSnail;
-      rs.x = renderS.x; rs.y = renderS.y; rs.angle = renderS.angle || 0;
+      rs.x = s.x; rs.y = s.y; rs.angle = s.angle || 0;
       rs.ghostVisible = s.ghostVisible !== false;
       if (time % 3 === 0) { rs.trail.push({ x: rs.x, y: rs.y, alpha: 0.4 }); if (rs.trail.length > 100) rs.trail.shift(); }
       drawSnailAt(rs);
