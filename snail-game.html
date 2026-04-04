@@ -80,8 +80,9 @@
     z-index: 10;
     opacity: 0;
     transition: opacity 0.3s;
-    white-space: nowrap;
+    white-space: normal;
     max-width: 90vw;
+    text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -529,6 +530,14 @@
     cursor: pointer; transition: transform 0.2s; margin: 5px;
   }
   .menu-btn:hover { transform: scale(1.08); }
+  @media (max-width: 768px), (pointer: coarse) {
+    .menu-btn { padding: 14px 30px; font-size: clamp(15px, 4vw, 20px); min-height: 48px; }
+    #stats { font-size: clamp(11px, 3vw, 14px); }
+    #stats-line2 { font-size: clamp(10px, 2.5vw, 12px); }
+    #win-screen h1 { font-size: 40px; }
+    #win-screen .win-sub { font-size: 18px; }
+    #win-screen .win-stats { font-size: 14px; }
+  }
   #menu-play { background: #ffd700; color: #1a1a2e; }
   #menu-settings { background: #333; color: #fff; }
   #menu-delete { background: #882222; color: #fff; font-size: 12px; padding: 8px 20px; margin-top: 10px; }
@@ -1151,6 +1160,7 @@ const statsEl = document.getElementById('stats');
 
 canvas.width = confettiCanvas.width = window.innerWidth;
 canvas.height = confettiCanvas.height = window.innerHeight;
+const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.innerWidth < 768;
 window.addEventListener('resize', () => {
   canvas.width = confettiCanvas.width = window.innerWidth;
   canvas.height = confettiCanvas.height = window.innerHeight;
@@ -2976,6 +2986,10 @@ canvas.addEventListener('touchstart', e => {
   const t = e.touches[0];
   handlePointerMove(t.clientX, t.clientY);
 }, { passive: false });
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  // Keep cursor at last touch position so snails don't escape when finger lifts
+}, { passive: false });
 
 // Move name -> CSS animation class + color + duration + shake intensity
 const moveStyles = {
@@ -3402,9 +3416,10 @@ function checkHoverCatch() {
     updateStats();
   }
 
-  // Catch check — if ANY part of the crosshair (20px radius) touches the snail
-  const snailRadius = closestSnail ? (closestSnail.catchRadius || 25) : 25;
-  const crosshairRadius = window._crosshairSize || 20;
+  // Catch check — if ANY part of the crosshair touches the snail (bigger on mobile)
+  const baseSnailRadius = closestSnail ? (closestSnail.catchRadius || 25) : 25;
+  const snailRadius = isMobile ? baseSnailRadius + 10 : baseSnailRadius;
+  const crosshairRadius = window._crosshairSize || (isMobile ? 35 : 20);
   const catchDist = snailRadius + crosshairRadius;
   // Ghost: can't catch when invisible
   if (closestSnail && (closestSnail.type === 'Ghost' || closestSnail.type === 'Ninja') && !closestSnail.ghostVisible) {
@@ -4661,11 +4676,12 @@ function drawCursor() {
   ctx.stroke();
   ctx.setLineDash([]);
 
+  const crossLen = isMobile ? 14 : 8;
   ctx.beginPath();
-  ctx.moveTo(-8, 0); ctx.lineTo(8, 0);
-  ctx.moveTo(0, -8); ctx.lineTo(0, 8);
+  ctx.moveTo(-crossLen, 0); ctx.lineTo(crossLen, 0);
+  ctx.moveTo(0, -crossLen); ctx.lineTo(0, crossLen);
   ctx.strokeStyle = 'rgba(255,100,100,0.8)';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = isMobile ? 2.5 : 1.5;
   ctx.stroke();
 
   if (cutsceneActive) {
@@ -6559,7 +6575,7 @@ function gameLoop() {
 }
 
 // ============ SETTINGS SYSTEM ============
-const defaultSettings = { volume: 50, sfx: 100, crosshairSize: 20, shake: 'full', showDiff: 'yes', cutSpeed: 'normal', trail: 'on' };
+const defaultSettings = { volume: 50, sfx: 100, crosshairSize: isMobile ? 35 : 20, shake: 'full', showDiff: 'yes', cutSpeed: 'normal', trail: 'on' };
 let gameSettings = { ...defaultSettings };
 
 function loadSettings() {
