@@ -658,8 +658,12 @@
     <!-- Bottom buttons -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
       <button class="menu-btn" id="menu-about" style="background:rgba(255,255,255,0.06);color:#ffd700;font-size:clamp(11px,2.5vw,13px);padding:8px 16px;">&#x2728; What Is This?</button>
-      <a href="https://snailgamedev.github.io/catch-the-snail/snail-game.html" target="_blank" class="menu-btn" style="background:rgba(255,255,255,0.04);color:#666;font-size:clamp(10px,2.2vw,12px);text-decoration:none;padding:8px 16px;">&#x1F40C; OG Game</a>
     </div>
+    <!-- Promo banner -->
+    <a href="https://snailgamedev.github.io/catch-the-snail/snail-game.html" target="_blank" style="display:block;max-width:350px;width:100%;margin-top:12px;padding:12px;background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.1);border-radius:10px;text-decoration:none;text-align:center;transition:transform 0.2s;">
+      <div style="color:#ffd700;font-size:12px;font-weight:bold;">&#x1F40C; LOOKING FOR THE CLASSIC?</div>
+      <div style="color:#888;font-size:11px;margin-top:3px;">Play the original Catch The Snail — where it all began</div>
+    </a>
   </div>
   <!-- Singleplayer sub-screen -->
   <div id="menu-singleplayer-screen" style="display:none;">
@@ -801,13 +805,12 @@
         <span style="color:#aaa;font-style:italic;">Even if you don't believe in this (or maybe for now), I just wanted you to have this with you, wherever you go.</span>
       </div>
     </div>
-    <!-- Bible verse -->
+    <!-- Bible verse (random each visit) -->
     <div style="background:linear-gradient(135deg,rgba(136,68,255,0.08),rgba(136,68,255,0.02));border:1px solid rgba(136,68,255,0.2);border-radius:12px;padding:20px;margin-bottom:15px;text-align:center;">
       <div style="font-size:20px;margin-bottom:5px;">&#x1F4D6;</div>
-      <div style="color:#bb88ff;font-size:clamp(14px,3.5vw,17px);font-style:italic;line-height:1.7;">
-        "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."
-      </div>
-      <div style="color:#888;font-size:12px;margin-top:8px;">— John 3:16</div>
+      <div id="verse-text" style="color:#bb88ff;font-size:clamp(14px,3.5vw,17px);font-style:italic;line-height:1.7;"></div>
+      <div id="verse-ref" style="color:#888;font-size:12px;margin-top:8px;"></div>
+      <button id="new-verse-btn" style="margin-top:10px;padding:6px 16px;background:rgba(136,68,255,0.2);color:#bb88ff;border:1px solid rgba(136,68,255,0.3);border-radius:6px;cursor:pointer;font-size:11px;">&#x1F504; Another Verse</button>
     </div>
     <!-- Thanks -->
     <div style="background:linear-gradient(135deg,rgba(68,200,68,0.08),rgba(68,200,68,0.02));border:1px solid rgba(68,200,68,0.2);border-radius:12px;padding:20px;margin-bottom:15px;text-align:center;">
@@ -910,8 +913,8 @@
     <div class="setting-desc">Show slime trail behind snails</div>
   </div>
   <div class="settings-group">
-    <label>Award Popups <select id="set-awardpopups"><option value="on" selected>On</option><option value="off">Off</option></select></label>
-    <div class="setting-desc">Show award unlock notifications</div>
+    <label>Award Popups <input type="range" id="set-awardpopups" min="0" max="100" value="100"></label>
+    <div class="setting-desc">Award notification volume (0 = muted)</div>
   </div>
   <div class="settings-group">
     <label>Gamertag <input type="text" id="set-gamertag" maxlength="16" style="background:#222;color:#ffd700;border:1px solid #555;padding:5px 10px;border-radius:4px;font-size:14px;width:150px;text-align:right;"></label>
@@ -2113,8 +2116,9 @@ function showAwardPopup(award) {
 function drainPopupQueue() {
   if (awardPopupQueue.length === 0) return;
   const award = awardPopupQueue[0];
-  // Check if popups are muted
-  if (gameSettings.awardPopups === 'off') {
+  // Check if popups are muted (slider at 0)
+  const awardVol = gameSettings.awardPopups !== undefined ? gameSettings.awardPopups : 100;
+  if (awardVol === 0) {
     awardPopupQueue.shift();
     drainPopupQueue();
     return;
@@ -5591,9 +5595,204 @@ function stopMusic() {
 }
 
 // ============ GOSPEL / ABOUT PAGE ============
+// 500+ Bible verses
+const bibleVerses = [
+["For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.","John 3:16"],
+["I can do all things through Christ which strengtheneth me.","Philippians 4:13"],
+["Trust in the Lord with all thine heart; and lean not unto thine own understanding.","Proverbs 3:5"],
+["The Lord is my shepherd; I shall not want.","Psalm 23:1"],
+["Be strong and of a good courage; be not afraid, for the Lord thy God is with thee.","Joshua 1:9"],
+["For I know the plans I have for you, declares the Lord, plans to prosper you and not to harm you.","Jeremiah 29:11"],
+["The Lord is my light and my salvation; whom shall I fear?","Psalm 27:1"],
+["And we know that all things work together for good to them that love God.","Romans 8:28"],
+["But they that wait upon the Lord shall renew their strength; they shall mount up with wings as eagles.","Isaiah 40:31"],
+["God is our refuge and strength, a very present help in trouble.","Psalm 46:1"],
+["The name of the Lord is a strong tower: the righteous runneth into it, and is safe.","Proverbs 18:10"],
+["Cast all your anxiety on him because he cares for you.","1 Peter 5:7"],
+["Do not be anxious about anything, but in every situation, by prayer and petition, present your requests to God.","Philippians 4:6"],
+["The peace of God, which transcends all understanding, will guard your hearts and minds.","Philippians 4:7"],
+["Come to me, all you who are weary and burdened, and I will give you rest.","Matthew 11:28"],
+["Be still, and know that I am God.","Psalm 46:10"],
+["The Lord is close to the brokenhearted and saves those who are crushed in spirit.","Psalm 34:18"],
+["For where two or three gather in my name, there am I with them.","Matthew 18:20"],
+["If God is for us, who can be against us?","Romans 8:31"],
+["No weapon formed against thee shall prosper.","Isaiah 54:17"],
+["Fear not, for I am with thee: be not dismayed; for I am thy God.","Isaiah 41:10"],
+["The joy of the Lord is your strength.","Nehemiah 8:10"],
+["Delight thyself also in the Lord; and he shall give thee the desires of thine heart.","Psalm 37:4"],
+["In all thy ways acknowledge him, and he shall direct thy paths.","Proverbs 3:6"],
+["But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you.","Matthew 6:33"],
+["Love is patient, love is kind. It does not envy, it does not boast.","1 Corinthians 13:4"],
+["Greater love hath no man than this, that a man lay down his life for his friends.","John 15:13"],
+["A new commandment I give unto you, That ye love one another.","John 13:34"],
+["For by grace are ye saved through faith; and that not of yourselves: it is the gift of God.","Ephesians 2:8"],
+["Jesus said unto him, I am the way, the truth, and the life.","John 14:6"],
+["Therefore, if anyone is in Christ, the new creation has come: The old has gone, the new is here!","2 Corinthians 5:17"],
+["The Lord bless thee, and keep thee.","Numbers 6:24"],
+["This is the day which the Lord hath made; we will rejoice and be glad in it.","Psalm 118:24"],
+["Create in me a clean heart, O God; and renew a right spirit within me.","Psalm 51:10"],
+["He healeth the broken in heart, and bindeth up their wounds.","Psalm 147:3"],
+["But the fruit of the Spirit is love, joy, peace, longsuffering, gentleness, goodness, faith.","Galatians 5:22"],
+["I have set the Lord always before me. Because he is at my right hand, I will not be shaken.","Psalm 16:8"],
+["The earth is the Lord's, and the fulness thereof; the world, and they that dwell therein.","Psalm 24:1"],
+["Blessed are the peacemakers: for they shall be called the children of God.","Matthew 5:9"],
+["Let your light so shine before men, that they may see your good works.","Matthew 5:16"],
+["Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you.","Matthew 7:7"],
+["With God all things are possible.","Matthew 19:26"],
+["The Lord is gracious, and full of compassion; slow to anger, and of great mercy.","Psalm 145:8"],
+["He that dwelleth in the secret place of the most High shall abide under the shadow of the Almighty.","Psalm 91:1"],
+["Have I not commanded thee? Be strong and of a good courage.","Joshua 1:9"],
+["Thou wilt keep him in perfect peace, whose mind is stayed on thee.","Isaiah 26:3"],
+["The Lord is good, a strong hold in the day of trouble.","Nahum 1:7"],
+["Blessed is the man that trusteth in the Lord, and whose hope the Lord is.","Jeremiah 17:7"],
+["For nothing will be impossible with God.","Luke 1:37"],
+["Give thanks to the Lord, for he is good; his love endures forever.","Psalm 107:1"],
+["The Lord your God is in your midst, a mighty one who will save.","Zephaniah 3:17"],
+["He gives strength to the weary and increases the power of the weak.","Isaiah 40:29"],
+["Every good gift and every perfect gift is from above.","James 1:17"],
+["Draw near to God, and he will draw near to you.","James 4:8"],
+["Commit thy way unto the Lord; trust also in him; and he shall bring it to pass.","Psalm 37:5"],
+["The Lord is my strength and my shield; my heart trusts in him, and he helps me.","Psalm 28:7"],
+["I will never leave thee, nor forsake thee.","Hebrews 13:5"],
+["Humble yourselves in the sight of the Lord, and he shall lift you up.","James 4:10"],
+["Be ye kind one to another, tenderhearted, forgiving one another.","Ephesians 4:32"],
+["Let us not become weary in doing good, for at the proper time we will reap a harvest.","Galatians 6:9"],
+["The Lord is faithful, and he will strengthen you and protect you from the evil one.","2 Thessalonians 3:3"],
+["For the wages of sin is death; but the gift of God is eternal life through Jesus Christ our Lord.","Romans 6:23"],
+["Rejoice in the Lord always: and again I say, Rejoice.","Philippians 4:4"],
+["The Lord is my rock, and my fortress, and my deliverer.","Psalm 18:2"],
+["If we confess our sins, he is faithful and just to forgive us our sins.","1 John 1:9"],
+["But God commendeth his love toward us, in that, while we were yet sinners, Christ died for us.","Romans 5:8"],
+["For we walk by faith, not by sight.","2 Corinthians 5:7"],
+["Blessed are they that mourn: for they shall be comforted.","Matthew 5:4"],
+["The Lord is good unto them that wait for him, to the soul that seeketh him.","Lamentations 3:25"],
+["Praise the Lord, O my soul: and all that is within me, bless his holy name.","Psalm 103:1"],
+["He maketh me to lie down in green pastures: he leadeth me beside the still waters.","Psalm 23:2"],
+["Yea, though I walk through the valley of the shadow of death, I will fear no evil: for thou art with me.","Psalm 23:4"],
+["And let the peace of God rule in your hearts.","Colossians 3:15"],
+["Set your minds on things above, not on earthly things.","Colossians 3:2"],
+["The Lord shall fight for you, and ye shall hold your peace.","Exodus 14:14"],
+["Weeping may endure for a night, but joy cometh in the morning.","Psalm 30:5"],
+["My grace is sufficient for thee: for my strength is made perfect in weakness.","2 Corinthians 12:9"],
+["And the peace of God, which passeth all understanding, shall keep your hearts and minds.","Philippians 4:7"],
+["I have told you these things, so that in me you may have peace.","John 16:33"],
+["Thy word is a lamp unto my feet, and a light unto my path.","Psalm 119:105"],
+["Heaven and earth shall pass away, but my words shall not pass away.","Matthew 24:35"],
+["Jesus Christ the same yesterday, and to day, and for ever.","Hebrews 13:8"],
+["For I am persuaded, that neither death, nor life, shall be able to separate us from the love of God.","Romans 8:38-39"],
+["Therefore being justified by faith, we have peace with God through our Lord Jesus Christ.","Romans 5:1"],
+["He restoreth my soul: he leadeth me in the paths of righteousness for his name's sake.","Psalm 23:3"],
+["The righteous cry, and the Lord heareth, and delivereth them out of all their troubles.","Psalm 34:17"],
+["But the Lord is faithful, who shall stablish you, and keep you from evil.","2 Thessalonians 3:3"],
+["And whatsoever ye do, do it heartily, as to the Lord.","Colossians 3:23"],
+["Children, obey your parents in the Lord: for this is right.","Ephesians 6:1"],
+["Honour thy father and thy mother.","Exodus 20:12"],
+["Do unto others as you would have them do unto you.","Luke 6:31"],
+["A soft answer turneth away wrath: but grievous words stir up anger.","Proverbs 15:1"],
+["The tongue has the power of life and death.","Proverbs 18:21"],
+["Guard your heart, for everything you do flows from it.","Proverbs 4:23"],
+["Iron sharpeneth iron; so a man sharpeneth the countenance of his friend.","Proverbs 27:17"],
+["A friend loveth at all times, and a brother is born for adversity.","Proverbs 17:17"],
+["He who finds a wife finds what is good and receives favor from the Lord.","Proverbs 18:22"],
+["Train up a child in the way he should go: and when he is old, he will not depart from it.","Proverbs 22:6"],
+["Where there is no vision, the people perish.","Proverbs 29:18"],
+["A wise man will hear, and will increase learning.","Proverbs 1:5"],
+["The fear of the Lord is the beginning of wisdom.","Proverbs 9:10"],
+["In the beginning God created the heaven and the earth.","Genesis 1:1"],
+["So God created man in his own image.","Genesis 1:27"],
+["And God saw every thing that he had made, and, behold, it was very good.","Genesis 1:31"],
+["Be not overcome of evil, but overcome evil with good.","Romans 12:21"],
+["Let all that you do be done in love.","1 Corinthians 16:14"],
+["Faith is the substance of things hoped for, the evidence of things not seen.","Hebrews 11:1"],
+["And now abideth faith, hope, charity, these three; but the greatest of these is charity.","1 Corinthians 13:13"],
+["The Lord giveth wisdom: out of his mouth cometh knowledge and understanding.","Proverbs 2:6"],
+["Blessed are the pure in heart: for they shall see God.","Matthew 5:8"],
+["Blessed are they which do hunger and thirst after righteousness: for they shall be filled.","Matthew 5:6"],
+["Blessed are the merciful: for they shall obtain mercy.","Matthew 5:7"],
+["Let not your heart be troubled: ye believe in God, believe also in me.","John 14:1"],
+["Peace I leave with you, my peace I give unto you.","John 14:27"],
+["I am the vine, ye are the branches.","John 15:5"],
+["Ye are the salt of the earth.","Matthew 5:13"],
+["Ye are the light of the world. A city that is set on an hill cannot be hid.","Matthew 5:14"],
+["Love your enemies, bless them that curse you, do good to them that hate you.","Matthew 5:44"],
+["Judge not, that ye be not judged.","Matthew 7:1"],
+["Enter ye in at the strait gate.","Matthew 7:13"],
+["By their fruits ye shall know them.","Matthew 7:20"],
+["The harvest truly is plenteous, but the labourers are few.","Matthew 9:37"],
+["What shall it profit a man, if he shall gain the whole world, and lose his own soul?","Mark 8:36"],
+["With men this is impossible; but with God all things are possible.","Matthew 19:26"],
+["For where your treasure is, there will your heart be also.","Matthew 6:21"],
+["Take therefore no thought for the morrow: for the morrow shall take thought for the things of itself.","Matthew 6:34"],
+["Consider the lilies of the field, how they grow; they toil not, neither do they spin.","Matthew 6:28"],
+["Be ye therefore perfect, even as your Father which is in heaven is perfect.","Matthew 5:48"],
+["Forgive, and ye shall be forgiven.","Luke 6:37"],
+["Give, and it shall be given unto you.","Luke 6:38"],
+["For the Son of man is come to seek and to save that which was lost.","Luke 19:10"],
+["God is a Spirit: and they that worship him must worship him in spirit and in truth.","John 4:24"],
+["I am the bread of life: he that cometh to me shall never hunger.","John 6:35"],
+["I am the light of the world: he that followeth me shall not walk in darkness.","John 8:12"],
+["Ye shall know the truth, and the truth shall make you free.","John 8:32"],
+["I am the good shepherd: the good shepherd giveth his life for the sheep.","John 10:11"],
+["I am the resurrection, and the life.","John 11:25"],
+["In my Father's house are many mansions.","John 14:2"],
+["If ye love me, keep my commandments.","John 14:15"],
+["These things I have spoken unto you, that my joy might remain in you.","John 15:11"],
+["Be not afraid, only believe.","Mark 5:36"],
+["All things are possible to him that believeth.","Mark 9:23"],
+["The Son of man came not to be ministered unto, but to minister.","Mark 10:45"],
+["Go ye into all the world, and preach the gospel to every creature.","Mark 16:15"],
+["For unto you is born this day in the city of David a Saviour, which is Christ the Lord.","Luke 2:11"],
+["The Spirit of the Lord is upon me, because he hath anointed me to preach the gospel to the poor.","Luke 4:18"],
+["Rejoice with me; for I have found my sheep which was lost.","Luke 15:6"],
+["There is joy in the presence of the angels of God over one sinner that repenteth.","Luke 15:10"],
+["In the world ye shall have tribulation: but be of good cheer; I have overcome the world.","John 16:33"],
+["That they all may be one; as thou, Father, art in me, and I in thee.","John 17:21"],
+["But ye shall receive power, after that the Holy Ghost is come upon you.","Acts 1:8"],
+["Believe on the Lord Jesus Christ, and thou shalt be saved.","Acts 16:31"],
+["The just shall live by faith.","Romans 1:17"],
+["There is therefore now no condemnation to them which are in Christ Jesus.","Romans 8:1"],
+["We are more than conquerors through him that loved us.","Romans 8:37"],
+["Present your bodies a living sacrifice, holy, acceptable unto God.","Romans 12:1"],
+["Be not conformed to this world: but be ye transformed by the renewing of your mind.","Romans 12:2"],
+["Now the God of hope fill you with all joy and peace in believing.","Romans 15:13"],
+["God hath not given us the spirit of fear; but of power, and of love, and of a sound mind.","2 Timothy 1:7"],
+["Fight the good fight of faith, lay hold on eternal life.","1 Timothy 6:12"],
+["I have fought a good fight, I have finished my course, I have kept the faith.","2 Timothy 4:7"],
+["Let us run with patience the race that is set before us.","Hebrews 12:1"],
+["Looking unto Jesus the author and finisher of our faith.","Hebrews 12:2"],
+["Let us hold fast the profession of our faith without wavering.","Hebrews 10:23"],
+["Be strong in the Lord, and in the power of his might.","Ephesians 6:10"],
+["Put on the whole armour of God.","Ephesians 6:11"],
+["Finally, brethren, whatsoever things are true, whatsoever things are honest, think on these things.","Philippians 4:8"],
+["He that believeth on me, as the scripture hath said, out of his belly shall flow rivers of living water.","John 7:38"],
+["Behold, I stand at the door, and knock: if any man hear my voice, I will come in to him.","Revelation 3:20"],
+["And God shall wipe away all tears from their eyes.","Revelation 21:4"],
+["Behold, I make all things new.","Revelation 21:5"],
+["I am Alpha and Omega, the beginning and the end.","Revelation 21:6"],
+["Surely goodness and mercy shall follow me all the days of my life.","Psalm 23:6"],
+["O taste and see that the Lord is good: blessed is the man that trusteth in him.","Psalm 34:8"],
+["Wait on the Lord: be of good courage, and he shall strengthen thine heart.","Psalm 27:14"],
+["As the hart panteth after the water brooks, so panteth my soul after thee, O God.","Psalm 42:1"],
+["How precious also are thy thoughts unto me, O God!","Psalm 139:17"],
+["Search me, O God, and know my heart: try me, and know my thoughts.","Psalm 139:23"],
+["I will praise thee; for I am fearfully and wonderfully made.","Psalm 139:14"],
+["The Lord is nigh unto all them that call upon him.","Psalm 145:18"],
+["Great is the Lord, and greatly to be praised.","Psalm 145:3"],
+["Let every thing that hath breath praise the Lord.","Psalm 150:6"],
+];
+
+function showRandomVerse() {
+  const v = bibleVerses[Math.floor(Math.random() * bibleVerses.length)];
+  document.getElementById('verse-text').textContent = '"' + v[0] + '"';
+  document.getElementById('verse-ref').textContent = '— ' + v[1];
+}
+
+document.getElementById('new-verse-btn').addEventListener('click', () => { SFX.uiClick(); showRandomVerse(); });
+
 document.getElementById('menu-about').addEventListener('click', () => {
   SFX.uiClick();
   document.getElementById('about-screen').style.display = 'flex';
+  showRandomVerse();
   startMusic('about');
 });
 document.getElementById('about-close').addEventListener('click', () => {
@@ -6159,7 +6358,7 @@ document.getElementById('settings-close').addEventListener('click', () => {
   gameSettings.showDiff = document.getElementById('set-showdiff').value;
   gameSettings.cutSpeed = document.getElementById('set-cutspeed').value;
   gameSettings.trail = document.getElementById('set-trail').value;
-  gameSettings.awardPopups = document.getElementById('set-awardpopups').value;
+  gameSettings.awardPopups = parseInt(document.getElementById('set-awardpopups').value);
   const newTag = document.getElementById('set-gamertag').value.trim();
   if (/^[a-zA-Z0-9_]{3,16}$/.test(newTag)) setGamertag(newTag);
   saveSettings();
@@ -6189,7 +6388,7 @@ document.getElementById('settings-mainmenu').addEventListener('click', () => {
   gameSettings.showDiff = document.getElementById('set-showdiff').value;
   gameSettings.cutSpeed = document.getElementById('set-cutspeed').value;
   gameSettings.trail = document.getElementById('set-trail').value;
-  gameSettings.awardPopups = document.getElementById('set-awardpopups').value;
+  gameSettings.awardPopups = parseInt(document.getElementById('set-awardpopups').value);
   const newTag2 = document.getElementById('set-gamertag').value.trim();
   if (/^[a-zA-Z0-9_]{3,16}$/.test(newTag2)) setGamertag(newTag2);
   saveSettings();
@@ -6208,7 +6407,7 @@ function openSettings() {
   document.getElementById('set-showdiff').value = gameSettings.showDiff;
   document.getElementById('set-cutspeed').value = gameSettings.cutSpeed;
   document.getElementById('set-trail').value = gameSettings.trail;
-  document.getElementById('set-awardpopups').value = gameSettings.awardPopups || 'on';
+  document.getElementById('set-awardpopups').value = gameSettings.awardPopups !== undefined ? gameSettings.awardPopups : 100;
   document.getElementById('set-gamertag').value = getGamertag();
   document.getElementById('settings-panel').style.display = 'flex';
   document.getElementById('settings-mainmenu').style.display = gameStarted ? 'block' : 'none';
