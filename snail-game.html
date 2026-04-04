@@ -766,6 +766,7 @@
       <button class="menu-btn lb-mode" data-mode="global" style="background:#ffd700;color:#1a1a2e;padding:6px 0;font-size:clamp(10px,2.2vw,12px);border-radius:18px;flex:1;">GLOBAL</button>
       <button class="menu-btn lb-mode" data-mode="sp" style="background:transparent;color:#888;padding:6px 0;font-size:clamp(10px,2.2vw,12px);border-radius:18px;flex:1;">SOLO</button>
       <button class="menu-btn lb-mode" data-mode="mp" style="background:transparent;color:#888;padding:6px 0;font-size:clamp(10px,2.2vw,12px);border-radius:18px;flex:1;">MULTI</button>
+      <button class="menu-btn lb-mode" data-mode="combined" style="background:transparent;color:#888;padding:6px 0;font-size:clamp(10px,2.2vw,12px);border-radius:18px;flex:1;">COMBINED</button>
     </div>
     <!-- Stat tabs — icon style -->
     <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;justify-content:center;">
@@ -1085,16 +1086,30 @@ function updateLeaderboard(gamertag, totalCaught, totalPlaytime, totalMoves, cle
     });
   });
 
-  // Global = read both SP and MP, take the HIGHER value for each board
+  // Global BEST = highest value between SP and MP
   periods.forEach(period => {
     const pk = period === 'alltime' ? '' : '/' + getTimePeriodKey(period);
     Object.entries(modeBoards).forEach(([board, value]) => {
       const globalRef = fbDB.ref('leaderboards/' + board + pk + '/' + uid);
       globalRef.once('value', snap => {
         const existing = snap.exists() ? snap.val().value || 0 : 0;
-        // For grades, higher number = better grade. For everything else, higher = better.
         const best = Math.max(existing, value);
         globalRef.set({ gamertag, value: best, updated: ts });
+      });
+    });
+  });
+
+  // Global COMBINED = SP + MP totals added together
+  // Read both SP and MP values and sum them
+  const combinableBoards = ['totalCaught', 'timePlayed', 'movesEaten'];
+  combinableBoards.forEach(board => {
+    const spRef = fbDB.ref('leaderboards/sp_' + board + '/' + uid);
+    const mpRef = fbDB.ref('leaderboards/mp_' + board + '/' + uid);
+    spRef.once('value', spSnap => {
+      mpRef.once('value', mpSnap => {
+        const spVal = spSnap.exists() ? spSnap.val().value || 0 : 0;
+        const mpVal = mpSnap.exists() ? mpSnap.val().value || 0 : 0;
+        fbDB.ref('leaderboards/combined_' + board + '/' + uid).set({ gamertag, value: spVal + mpVal, updated: ts });
       });
     });
   });
@@ -7255,7 +7270,7 @@ function renderLeaderboard(board, period, mode) {
   document.getElementById('lb-loading').style.display = 'block';
   document.getElementById('lb-list').innerHTML = '';
 
-  const modePrefix = currentLBMode === 'global' ? '' : currentLBMode === 'sp' ? 'sp_' : 'mp_';
+  const modePrefix = currentLBMode === 'global' ? '' : currentLBMode === 'sp' ? 'sp_' : currentLBMode === 'mp' ? 'mp_' : 'combined_';
   fetchLeaderboard(modePrefix + currentLBTab, currentLBPeriod, entries => {
     document.getElementById('lb-loading').style.display = 'none';
     const list = document.getElementById('lb-list');
