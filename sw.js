@@ -1,4 +1,4 @@
-const CACHE_NAME = 'snail-game-v2';
+const CACHE_NAME = 'snail-game-v3';
 const ASSETS = ['./snail-game.html', './manifest.json'];
 
 self.addEventListener('install', e => {

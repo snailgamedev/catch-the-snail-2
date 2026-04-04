@@ -4129,7 +4129,7 @@ function startMultiplayerGame(lobbyData) {
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('ui').style.display = 'none';
   document.body.classList.remove('in-menu');
-  stopMusic();
+  startMusic('gameplay');
   gameStarted = true;
   paused = false;
 
@@ -4879,6 +4879,45 @@ function startMusic(type) {
         if (step % 3 === 0) { kickG.gain.setValueAtTime(0.3, t); kickG.gain.exponentialRampToValueAtTime(0.001, t+0.12); kick.frequency.setValueAtTime(90, t); kick.frequency.exponentialRampToValueAtTime(40, t+0.1); }
         if (step % 6 === 3) { snareG.gain.setValueAtTime(0.15, t); snareG.gain.exponentialRampToValueAtTime(0.001, t+0.08); }
       } catch(e) {} }, 150));
+    }
+
+    else if (type === 'gameplay') {
+      // GAMEPLAY: Tense chase — driving beat, minor key tension, building intensity
+      const lead = ctx.createOscillator(); lead.type = 'sawtooth';
+      const leadG = ctx.createGain(); leadG.gain.value = 0.06;
+      const leadF = ctx.createBiquadFilter(); leadF.type = 'lowpass'; leadF.frequency.value = 1800;
+      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
+      const bass = ctx.createOscillator(); bass.type = 'triangle';
+      const bassG = ctx.createGain(); bassG.gain.value = 0.3;
+      bass.connect(bassG); bassG.connect(master);
+      const perc = ctx.createOscillator(); perc.type = 'square';
+      const percG = ctx.createGain(); percG.gain.value = 0;
+      const percF = ctx.createBiquadFilter(); percF.type = 'bandpass'; percF.frequency.value = 800;
+      perc.connect(percF); percF.connect(percG); percG.connect(master);
+      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 55;
+      const kickG = ctx.createGain(); kickG.gain.value = 0;
+      kick.connect(kickG); kickG.connect(master);
+      // C minor chase — urgent, sneaky, intense
+      const mel = [262,294,311,349,392,349,311,294,262,247,233,247,262,311,349,392,440,392,349,311,294,262,247,233];
+      const basN = [65,65,65,65,73,73,73,73,78,78,78,78,73,73,73,73,65,65,65,65,58,58,58,58];
+      let step = 0;
+      lead.frequency.value = mel[0]; bass.frequency.value = basN[0]; perc.frequency.value = 400;
+      lead.start(now); bass.start(now); perc.start(now); kick.start(now);
+      musicNodes = [lead, bass, perc, kick, master, leadG, bassG, percG, kickG, leadF, percF];
+      musicTimers.push(setInterval(() => { try {
+        step = (step+1) % mel.length;
+        const t = ctx.currentTime;
+        lead.frequency.setValueAtTime(mel[step], t);
+        bass.frequency.setValueAtTime(basN[step], t);
+        leadG.gain.setValueAtTime(0.08, t);
+        leadG.gain.linearRampToValueAtTime(0.04, t + 0.12);
+        // Driving kick — every 2nd step
+        if (step % 2 === 0) { kickG.gain.setValueAtTime(0.22, t); kickG.gain.exponentialRampToValueAtTime(0.001, t+0.1); kick.frequency.setValueAtTime(75, t); kick.frequency.exponentialRampToValueAtTime(35, t+0.08); }
+        // Percussion hits
+        if (step % 3 === 0) { percG.gain.setValueAtTime(0.06, t); percG.gain.exponentialRampToValueAtTime(0.001, t+0.06); }
+        // Filter sweep for tension
+        leadF.frequency.linearRampToValueAtTime(1200 + Math.sin(t * 0.8) * 600, t + 0.5);
+      } catch(e) {} }, 180));
     }
 
     else {
@@ -5763,7 +5802,7 @@ document.getElementById('menu-play').addEventListener('click', () => {
   loadSlot(currentSlot);
   document.getElementById('main-menu').style.display = 'none';
   document.body.classList.remove('in-menu');
-  stopMusic();
+  startMusic('gameplay');
   gameStarted = true;
   initWave();
   paused = false;
