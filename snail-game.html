@@ -5310,11 +5310,12 @@ document.querySelectorAll('.inbox-filter').forEach(btn => {
   btn.addEventListener('click', () => {
     SFX.uiClick();
     inboxFilter = btn.dataset.filter;
+    inboxPage = 0;
     document.querySelectorAll('.inbox-filter').forEach(b => {
       b.style.background = b.dataset.filter === inboxFilter ? '#ffd700' : '#333';
       b.style.color = b.dataset.filter === inboxFilter ? '#1a1a2e' : '#fff';
     });
-    loadFeedbackInbox();
+    if (inboxAllItems.length > 0) renderInboxPage(); else loadFeedbackInbox();
   });
 });
 
@@ -5328,6 +5329,10 @@ document.getElementById('inbox-clear-all').addEventListener('click', () => {
   });
 });
 
+let inboxPage = 0;
+const ITEMS_PER_PAGE = 10;
+let inboxAllItems = [];
+
 function loadFeedbackInbox() {
   if (!fbDB) {
     document.getElementById('inbox-count').textContent = 'No connection';
@@ -5335,43 +5340,75 @@ function loadFeedbackInbox() {
   }
   document.getElementById('inbox-count').textContent = 'Loading...';
   document.getElementById('inbox-list').innerHTML = '';
+  inboxPage = 0;
 
-  fbDB.ref('feedback').orderByChild('timestamp').limitToLast(200).once('value', snap => {
-    const list = document.getElementById('inbox-list');
-    list.innerHTML = '';
-    const items = [];
-    snap.forEach(child => items.push({ key: child.key, ...child.val() }));
-    items.reverse();
-
-    // Apply filter
-    const filtered = inboxFilter === 'all' ? items : items.filter(i => i.type === inboxFilter);
-    document.getElementById('inbox-count').textContent = `${filtered.length} of ${items.length} entries (${inboxFilter})`;
-
-    if (filtered.length === 0) {
-      list.innerHTML = '<div style="color:#555;text-align:center;padding:20px;">No feedback here yet.</div>';
-      return;
-    }
-
-    filtered.forEach(item => {
-      const typeColors = { bug: '#ff4444', idea: '#4488ff', feedback: '#ffd700', compliment: '#44cc44', other: '#888' };
-      const div = document.createElement('div');
-      div.className = 'feedback-item';
-      div.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span class="fb-from">${item.gamertag || 'Anon'}</span>
-          <span style="color:${typeColors[item.type] || '#888'};font-size:10px;font-weight:bold;text-transform:uppercase;background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:4px;">${item.type || 'feedback'}</span>
-        </div>
-        <div class="fb-msg">${item.message}</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-          <span class="fb-date">${item.date ? new Date(item.date).toLocaleString() : new Date(item.timestamp).toLocaleString()}</span>
-          <button onclick="deleteFeedback('${item.key}')" style="background:#882222;color:#fff;border:none;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:10px;">DELETE</button>
-        </div>`;
-      list.appendChild(div);
-    });
+  fbDB.ref('feedback').orderByChild('timestamp').limitToLast(500).once('value', snap => {
+    inboxAllItems = [];
+    snap.forEach(child => inboxAllItems.push({ key: child.key, ...child.val() }));
+    inboxAllItems.reverse();
+    renderInboxPage();
   }).catch(err => {
     document.getElementById('inbox-count').textContent = 'Error: ' + err.message;
-    console.error('Inbox load error:', err);
   });
+}
+
+function renderInboxPage() {
+  const list = document.getElementById('inbox-list');
+  list.innerHTML = '';
+
+  const filtered = inboxFilter === 'all' ? inboxAllItems : inboxAllItems.filter(i => i.type === inboxFilter);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  if (inboxPage >= totalPages) inboxPage = totalPages - 1;
+  if (inboxPage < 0) inboxPage = 0;
+
+  const start = inboxPage * ITEMS_PER_PAGE;
+  const pageItems = filtered.slice(start, start + ITEMS_PER_PAGE);
+
+  document.getElementById('inbox-count').textContent = `${filtered.length} entries (${inboxFilter}) | Page ${inboxPage + 1}/${totalPages}`;
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div style="color:#555;text-align:center;padding:20px;">No feedback here yet.</div>';
+    return;
+  }
+
+  const typeColors = { bug: '#ff4444', idea: '#4488ff', feedback: '#ffd700', compliment: '#44cc44', other: '#888' };
+
+  pageItems.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'feedback-item';
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span class="fb-from">${item.gamertag || 'Anon'}</span>
+        <span style="color:${typeColors[item.type] || '#888'};font-size:10px;font-weight:bold;text-transform:uppercase;background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:4px;">${item.type || 'feedback'}</span>
+      </div>
+      <div class="fb-msg">${item.message}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+        <span class="fb-date">${item.date ? new Date(item.date).toLocaleString() : new Date(item.timestamp).toLocaleString()}</span>
+        <button onclick="deleteFeedback('${item.key}')" style="background:#882222;color:#fff;border:none;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:10px;">DELETE</button>
+      </div>`;
+    list.appendChild(div);
+  });
+
+  // Page controls
+  if (totalPages > 1) {
+    const nav = document.createElement('div');
+    nav.style.cssText = 'display:flex;justify-content:center;gap:10px;margin-top:12px;align-items:center;';
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = '< PREV';
+    prevBtn.style.cssText = `padding:6px 14px;font-size:12px;font-weight:bold;background:${inboxPage > 0 ? '#4488ff' : '#333'};color:#fff;border:none;border-radius:4px;cursor:pointer;`;
+    prevBtn.onclick = () => { if (inboxPage > 0) { inboxPage--; renderInboxPage(); } };
+    const pageInfo = document.createElement('span');
+    pageInfo.style.cssText = 'color:#aaa;font-size:13px;';
+    pageInfo.textContent = `${inboxPage + 1} / ${totalPages}`;
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'NEXT >';
+    nextBtn.style.cssText = `padding:6px 14px;font-size:12px;font-weight:bold;background:${inboxPage < totalPages - 1 ? '#4488ff' : '#333'};color:#fff;border:none;border-radius:4px;cursor:pointer;`;
+    nextBtn.onclick = () => { if (inboxPage < totalPages - 1) { inboxPage++; renderInboxPage(); } };
+    nav.appendChild(prevBtn);
+    nav.appendChild(pageInfo);
+    nav.appendChild(nextBtn);
+    list.appendChild(nav);
+  }
 }
 
 window.deleteFeedback = function(key) {
