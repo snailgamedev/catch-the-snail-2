@@ -750,30 +750,39 @@
   <!-- Leaderboard sub-screen -->
   <div id="menu-leaderboard-screen" style="display:none;">
     <button class="menu-back" id="lb-back">BACK</button>
-    <h1>LEADERBOARDS</h1>
-    <!-- Mode tabs -->
-    <div style="display:flex;gap:6px;margin-bottom:8px;justify-content:center;">
-      <button class="menu-btn lb-mode" data-mode="global" style="background:#ffd700;color:#1a1a2e;padding:5px 14px;font-size:clamp(10px,2.2vw,13px);">GLOBAL</button>
-      <button class="menu-btn lb-mode" data-mode="sp" style="background:#333;color:#fff;padding:5px 14px;font-size:clamp(10px,2.2vw,13px);">SINGLEPLAYER</button>
-      <button class="menu-btn lb-mode" data-mode="mp" style="background:#333;color:#fff;padding:5px 14px;font-size:clamp(10px,2.2vw,13px);">MULTIPLAYER</button>
+    <!-- Header with trophy -->
+    <div style="text-align:center;margin-bottom:10px;">
+      <div style="font-size:clamp(30px,8vw,45px);">&#x1F3C6;</div>
+      <h1 style="margin-top:-5px;">LEADERBOARDS</h1>
     </div>
-    <!-- Stat tabs -->
-    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;justify-content:center;">
-      <button class="menu-btn lb-tab" data-board="totalCaught" style="background:#ffd700;color:#1a1a2e;padding:6px 14px;font-size:clamp(10px,2.2vw,13px);">MOST CAUGHT</button>
-      <button class="menu-btn lb-tab" data-board="timePlayed" style="background:#333;color:#fff;padding:6px 14px;font-size:clamp(10px,2.2vw,13px);">MOST TIME</button>
-      <button class="menu-btn lb-tab" data-board="movesEaten" style="background:#333;color:#fff;padding:6px 14px;font-size:clamp(10px,2.2vw,13px);">TIMES MOVED ON</button>
-      <button class="menu-btn lb-tab" data-board="cleanWaves" style="background:#333;color:#fff;padding:6px 14px;font-size:clamp(10px,2.2vw,13px);">CLEAN WAVES</button>
+    <!-- Mode tabs — pill style -->
+    <div style="display:flex;background:rgba(255,255,255,0.05);border-radius:20px;padding:3px;margin-bottom:10px;max-width:350px;width:100%;">
+      <button class="menu-btn lb-mode" data-mode="global" style="background:#ffd700;color:#1a1a2e;padding:6px 0;font-size:clamp(10px,2.2vw,12px);border-radius:18px;flex:1;">GLOBAL</button>
+      <button class="menu-btn lb-mode" data-mode="sp" style="background:transparent;color:#888;padding:6px 0;font-size:clamp(10px,2.2vw,12px);border-radius:18px;flex:1;">SOLO</button>
+      <button class="menu-btn lb-mode" data-mode="mp" style="background:transparent;color:#888;padding:6px 0;font-size:clamp(10px,2.2vw,12px);border-radius:18px;flex:1;">MULTI</button>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;justify-content:center;">
-      <button class="menu-btn lb-period" data-period="alltime" style="background:#ffd700;color:#1a1a2e;padding:5px 12px;font-size:clamp(9px,2vw,11px);">ALL TIME</button>
-      <button class="menu-btn lb-period" data-period="daily" style="background:#333;color:#fff;padding:5px 12px;font-size:clamp(9px,2vw,11px);">DAILY</button>
-      <button class="menu-btn lb-period" data-period="weekly" style="background:#333;color:#fff;padding:5px 12px;font-size:clamp(9px,2vw,11px);">WEEKLY</button>
-      <button class="menu-btn lb-period" data-period="monthly" style="background:#333;color:#fff;padding:5px 12px;font-size:clamp(9px,2vw,11px);">MONTHLY</button>
+    <!-- Stat tabs — icon style -->
+    <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;justify-content:center;">
+      <button class="menu-btn lb-tab" data-board="totalCaught" style="background:#ffd700;color:#1a1a2e;padding:6px 10px;font-size:clamp(9px,2vw,11px);border-radius:6px;">&#x1F40C; CAUGHT</button>
+      <button class="menu-btn lb-tab" data-board="timePlayed" style="background:#333;color:#fff;padding:6px 10px;font-size:clamp(9px,2vw,11px);border-radius:6px;">&#x23F1; TIME</button>
+      <button class="menu-btn lb-tab" data-board="movesEaten" style="background:#333;color:#fff;padding:6px 10px;font-size:clamp(9px,2vw,11px);border-radius:6px;">&#x1F3C8; MOVED ON</button>
+      <button class="menu-btn lb-tab" data-board="cleanWaves" style="background:#333;color:#fff;padding:6px 10px;font-size:clamp(9px,2vw,11px);border-radius:6px;">&#x2728; CLEAN</button>
     </div>
+    <!-- Period tabs — minimal -->
+    <div style="display:flex;gap:4px;margin-bottom:12px;justify-content:center;">
+      <button class="menu-btn lb-period" data-period="alltime" style="background:rgba(255,215,0,0.15);color:#ffd700;padding:4px 10px;font-size:clamp(8px,1.8vw,10px);border-radius:12px;border:1px solid rgba(255,215,0,0.3);">ALL TIME</button>
+      <button class="menu-btn lb-period" data-period="daily" style="background:rgba(255,255,255,0.05);color:#666;padding:4px 10px;font-size:clamp(8px,1.8vw,10px);border-radius:12px;border:1px solid transparent;">DAILY</button>
+      <button class="menu-btn lb-period" data-period="weekly" style="background:rgba(255,255,255,0.05);color:#666;padding:4px 10px;font-size:clamp(8px,1.8vw,10px);border-radius:12px;border:1px solid transparent;">WEEKLY</button>
+      <button class="menu-btn lb-period" data-period="monthly" style="background:rgba(255,255,255,0.05);color:#666;padding:4px 10px;font-size:clamp(8px,1.8vw,10px);border-radius:12px;border:1px solid transparent;">MONTHLY</button>
+    </div>
+    <!-- Leaderboard list -->
     <div id="lb-loading" style="color:#888;font-size:14px;">Loading...</div>
     <div id="lb-list" style="width:100%;max-width:450px;"></div>
-    <button id="lb-reset" class="menu-btn" style="background:#882222;color:#fff;padding:6px 16px;font-size:clamp(10px,2.2vw,12px);margin-top:15px;">RESET MY SCORES</button>
-    <button id="lb-admin-clear" class="menu-btn" style="background:#440000;color:#ff4444;padding:6px 16px;font-size:clamp(10px,2.2vw,12px);margin-top:5px;display:none;">ADMIN: CLEAR LEADERBOARDS</button>
+    <!-- Bottom buttons -->
+    <div style="display:flex;gap:6px;margin-top:15px;flex-wrap:wrap;justify-content:center;">
+      <button id="lb-reset" class="menu-btn" style="background:rgba(136,34,34,0.5);color:#ff8888;padding:6px 14px;font-size:clamp(9px,2vw,11px);border-radius:6px;">RESET SCORES</button>
+      <button id="lb-admin-clear" class="menu-btn" style="background:rgba(68,0,0,0.5);color:#ff4444;padding:6px 14px;font-size:clamp(9px,2vw,11px);border-radius:6px;display:none;">ADMIN CLEAR</button>
+    </div>
   </div>
 </div>
 <!-- About / Gospel Page (with pizzazz) -->
@@ -5249,7 +5258,24 @@ let musicTimers = [];
 
 function startMusic(type) {
   if (musicPlaying && currentMusicType === type) return;
-  stopMusic();
+  // Crossfade — fade old out while new fades in
+  const wasPlaying = musicPlaying;
+  if (wasPlaying) {
+    // Fade out old track over 1.5 seconds
+    const oldNodes = [...musicNodes];
+    const oldTimers = [...musicTimers];
+    musicNodes = [];
+    musicTimers = [];
+    musicPlaying = false;
+    currentMusicType = '';
+    try {
+      const c = ensureAudio();
+      const t = c.currentTime;
+      oldNodes.forEach(n => { try { if (n.gain && typeof n.gain.linearRampToValueAtTime === 'function') n.gain.linearRampToValueAtTime(0, t + 1.5); } catch(e) {} });
+      setTimeout(() => { oldNodes.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} }); }, 1600);
+    } catch(e) { oldNodes.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} }); }
+    oldTimers.forEach(t => clearInterval(t));
+  }
   try {
     const ctx = ensureAudio();
     if (ctx.state !== 'running') return;
@@ -5258,7 +5284,7 @@ function startMusic(type) {
 
     const master = ctx.createGain();
     master.gain.setValueAtTime(0, now);
-    master.gain.linearRampToValueAtTime(vol, now + 1.5);
+    master.gain.linearRampToValueAtTime(vol, now + 2.5); // slow fade in for butter-smooth crossfade
     master.connect(ctx.destination);
 
     musicPlaying = true;
@@ -6999,20 +7025,24 @@ function renderLeaderboard(board, period, mode) {
   if (period) currentLBPeriod = period;
   if (mode) currentLBMode = mode;
   // Update all button states
+  // Pill-style mode tabs
   document.querySelectorAll('.lb-mode').forEach(btn => {
     const active = btn.dataset.mode === currentLBMode;
-    btn.style.background = active ? '#ffd700' : '#333';
-    btn.style.color = active ? '#1a1a2e' : '#fff';
+    btn.style.background = active ? '#ffd700' : 'transparent';
+    btn.style.color = active ? '#1a1a2e' : '#888';
   });
+  // Icon stat tabs
   document.querySelectorAll('.lb-tab').forEach(btn => {
     const active = btn.dataset.board === currentLBTab;
     btn.style.background = active ? '#ffd700' : '#333';
     btn.style.color = active ? '#1a1a2e' : '#fff';
   });
+  // Minimal period tabs
   document.querySelectorAll('.lb-period').forEach(btn => {
     const active = btn.dataset.period === currentLBPeriod;
-    btn.style.background = active ? '#ffd700' : '#333';
-    btn.style.color = active ? '#1a1a2e' : '#fff';
+    btn.style.background = active ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.05)';
+    btn.style.color = active ? '#ffd700' : '#666';
+    btn.style.borderColor = active ? 'rgba(255,215,0,0.3)' : 'transparent';
   });
   document.getElementById('lb-loading').style.display = 'block';
   document.getElementById('lb-list').innerHTML = '';
