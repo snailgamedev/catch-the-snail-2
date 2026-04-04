@@ -5593,13 +5593,26 @@ function loadFeedbackInbox() {
   document.getElementById('inbox-count').textContent = 'Loading...';
   document.getElementById('inbox-list').innerHTML = '';
   inboxPage = 0;
+  inboxAllItems = [];
 
-  fbDB.ref('feedback').orderByChild('timestamp').limitToLast(500).once('value', snap => {
-    inboxAllItems = [];
-    snap.forEach(child => inboxAllItems.push({ key: child.key, ...child.val() }));
-    inboxAllItems.reverse();
+  // Simple get ALL feedback — no ordering constraints
+  fbDB.ref('feedback').once('value').then(function(snap) {
+    if (!snap.exists()) {
+      document.getElementById('inbox-count').textContent = '0 entries';
+      document.getElementById('inbox-list').innerHTML = '<div style="color:#555;text-align:center;padding:20px;">No feedback yet.</div>';
+      return;
+    }
+    var data = snap.val();
+    var keys = Object.keys(data);
+    for (var i = 0; i < keys.length; i++) {
+      var item = data[keys[i]];
+      item.key = keys[i];
+      inboxAllItems.push(item);
+    }
+    // Sort newest first
+    inboxAllItems.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
     renderInboxPage();
-  }).catch(err => {
+  }).catch(function(err) {
     document.getElementById('inbox-count').textContent = 'Error: ' + err.message;
   });
 }
