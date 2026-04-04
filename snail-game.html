@@ -910,6 +910,10 @@
     <div class="setting-desc">Show slime trail behind snails</div>
   </div>
   <div class="settings-group">
+    <label>Award Popups <select id="set-awardpopups"><option value="on" selected>On</option><option value="off">Off</option></select></label>
+    <div class="setting-desc">Show award unlock notifications</div>
+  </div>
+  <div class="settings-group">
     <label>Gamertag <input type="text" id="set-gamertag" maxlength="16" style="background:#222;color:#ffd700;border:1px solid #555;padding:5px 10px;border-radius:4px;font-size:14px;width:150px;text-align:right;"></label>
     <div class="setting-desc">Your display name for leaderboards</div>
   </div>
@@ -2109,6 +2113,12 @@ function showAwardPopup(award) {
 function drainPopupQueue() {
   if (awardPopupQueue.length === 0) return;
   const award = awardPopupQueue[0];
+  // Check if popups are muted
+  if (gameSettings.awardPopups === 'off') {
+    awardPopupQueue.shift();
+    drainPopupQueue();
+    return;
+  }
   const popup = document.getElementById('award-popup');
   document.getElementById('popup-icon').textContent = award.icon;
   document.getElementById('popup-name').textContent = award.name;
@@ -6149,6 +6159,7 @@ document.getElementById('settings-close').addEventListener('click', () => {
   gameSettings.showDiff = document.getElementById('set-showdiff').value;
   gameSettings.cutSpeed = document.getElementById('set-cutspeed').value;
   gameSettings.trail = document.getElementById('set-trail').value;
+  gameSettings.awardPopups = document.getElementById('set-awardpopups').value;
   const newTag = document.getElementById('set-gamertag').value.trim();
   if (/^[a-zA-Z0-9_]{3,16}$/.test(newTag)) setGamertag(newTag);
   saveSettings();
@@ -6178,6 +6189,7 @@ document.getElementById('settings-mainmenu').addEventListener('click', () => {
   gameSettings.showDiff = document.getElementById('set-showdiff').value;
   gameSettings.cutSpeed = document.getElementById('set-cutspeed').value;
   gameSettings.trail = document.getElementById('set-trail').value;
+  gameSettings.awardPopups = document.getElementById('set-awardpopups').value;
   const newTag2 = document.getElementById('set-gamertag').value.trim();
   if (/^[a-zA-Z0-9_]{3,16}$/.test(newTag2)) setGamertag(newTag2);
   saveSettings();
@@ -6196,6 +6208,7 @@ function openSettings() {
   document.getElementById('set-showdiff').value = gameSettings.showDiff;
   document.getElementById('set-cutspeed').value = gameSettings.cutSpeed;
   document.getElementById('set-trail').value = gameSettings.trail;
+  document.getElementById('set-awardpopups').value = gameSettings.awardPopups || 'on';
   document.getElementById('set-gamertag').value = getGamertag();
   document.getElementById('settings-panel').style.display = 'flex';
   document.getElementById('settings-mainmenu').style.display = gameStarted ? 'block' : 'none';
