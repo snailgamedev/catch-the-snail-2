@@ -1,4 +1,4 @@
-const CACHE_NAME = 'snail-game-v3';
+const CACHE_NAME = 'snail-game-v4';
 const ASSETS = ['./snail-game.html', './manifest.json'];
 
 self.addEventListener('install', e => {
@@ -15,13 +15,17 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  // Don't cache Firebase requests or external APIs
+  // Don't cache Firebase or external requests
   if (url.hostname.includes('firebase') || url.hostname.includes('gstatic')) {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }
-  // Cache-first for game assets
+  // Network first — always try to get fresh version, fall back to cache
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
+    fetch(e.request).then(response => {
+      const clone = response.clone();
+      caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+      return response;
+    }).catch(() => caches.match(e.request))
   );
 });
