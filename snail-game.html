@@ -7355,67 +7355,71 @@ document.getElementById('lb-admin-clear').addEventListener('click', () => {
   const choice = prompt(
     'ADMIN: Clear leaderboard data.\n\n' +
     'Type one of:\n\n' +
-    '--- GLOBAL ---\n' +
-    '  ALL — wipe EVERYTHING\n' +
-    '  totalCaught — wipe all Most Caught\n' +
-    '  timePlayed — wipe all Most Time\n' +
-    '  movesEaten — wipe all Times Moved On\n' +
-    '  cleanWaves — wipe all Clean Waves\n\n' +
-    '--- SINGLEPLAYER ---\n' +
-    '  sp — wipe all SP boards\n' +
-    '  sp_caught — SP Most Caught only\n' +
-    '  sp_time — SP Most Time only\n' +
-    '  sp_moves — SP Times Moved On only\n' +
-    '  sp_clean — SP Clean Waves only\n\n' +
-    '--- MULTIPLAYER ---\n' +
-    '  mp — wipe all MP boards\n' +
-    '  mp_caught — MP Most Caught only\n' +
-    '  mp_time — MP Most Time only\n' +
-    '  mp_moves — MP Times Moved On only\n' +
-    '  mp_clean — MP Clean Waves only\n\n' +
-    '--- TIME PERIODS ---\n' +
-    '  daily — wipe all daily boards\n' +
-    '  weekly — wipe all weekly boards\n' +
-    '  monthly — wipe all monthly boards\n\n' +
+    '--- NUKE ---\n' +
+    '  ALL — wipe EVERYTHING\n\n' +
+    '--- BY CATEGORY ---\n' +
+    '  totalCaught | timePlayed | movesEaten\n' +
+    '  cleanWaves | bestGrade | highestWave\n\n' +
+    '--- BY MODE ---\n' +
+    '  sp — all Singleplayer\n' +
+    '  mp — all Multiplayer\n' +
+    '  combined — all Combined\n' +
+    '  global — all Global (best of)\n\n' +
+    '--- SP SPECIFIC ---\n' +
+    '  sp_caught | sp_time | sp_moves | sp_clean\n' +
+    '  sp_grade | sp_wave\n\n' +
+    '--- MP SPECIFIC ---\n' +
+    '  mp_caught | mp_time | mp_moves | mp_clean\n' +
+    '  mp_grade | mp_wave\n\n' +
+    '--- TIME ---\n' +
+    '  daily | weekly | monthly\n\n' +
     'Type your choice:'
   );
   if (!choice) return;
   const c = choice.trim().toLowerCase();
   if (!confirm(`Are you SURE you want to clear "${c}"? This affects EVERYONE.`)) return;
 
-  const allBoards = ['totalCaught','timePlayed','movesEaten','cleanWaves'];
-  const allPrefixes = ['','sp_','mp_'];
+  const allBoards = ['totalCaught','timePlayed','movesEaten','cleanWaves','bestGrade','highestWave'];
+  const allPrefixes = ['','sp_','mp_','combined_'];
 
   if (c === 'all') {
     fbDB.ref('leaderboards').remove().then(() => { alert('All leaderboards cleared.'); renderLeaderboard(); });
-  } else if (c === 'totalcaught' || c === 'timeplayed' || c === 'moveseaten' || c === 'cleanwaves') {
-    const board = c === 'totalcaught' ? 'totalCaught' : c === 'timeplayed' ? 'timePlayed' : c === 'moveseaten' ? 'movesEaten' : 'cleanWaves';
-    allPrefixes.forEach(p => fbDB.ref(`leaderboards/${p}${board}`).remove());
+  } else if (['totalcaught','timeplayed','moveseaten','cleanwaves','bestgrade','highestwave'].includes(c)) {
+    const boardMap = {totalcaught:'totalCaught',timeplayed:'timePlayed',moveseaten:'movesEaten',cleanwaves:'cleanWaves',bestgrade:'bestGrade',highestwave:'highestWave'};
+    const board = boardMap[c];
+    allPrefixes.forEach(p => fbDB.ref('leaderboards/' + p + board).remove());
     alert(`All ${board} boards cleared.`); renderLeaderboard();
   } else if (c === 'sp') {
-    allBoards.forEach(b => fbDB.ref(`leaderboards/sp_${b}`).remove());
+    allBoards.forEach(b => fbDB.ref('leaderboards/sp_' + b).remove());
     alert('All SP boards cleared.'); renderLeaderboard();
   } else if (c === 'mp') {
-    allBoards.forEach(b => fbDB.ref(`leaderboards/mp_${b}`).remove());
+    allBoards.forEach(b => fbDB.ref('leaderboards/mp_' + b).remove());
     alert('All MP boards cleared.'); renderLeaderboard();
-  } else if (c === 'sp_caught') { fbDB.ref('leaderboards/sp_totalCaught').remove(); alert('SP Most Caught cleared.'); renderLeaderboard();
-  } else if (c === 'sp_time') { fbDB.ref('leaderboards/sp_timePlayed').remove(); alert('SP Most Time cleared.'); renderLeaderboard();
-  } else if (c === 'sp_moves') { fbDB.ref('leaderboards/sp_movesEaten').remove(); alert('SP Moved On cleared.'); renderLeaderboard();
-  } else if (c === 'sp_clean') { fbDB.ref('leaderboards/sp_cleanWaves').remove(); alert('SP Clean Waves cleared.'); renderLeaderboard();
-  } else if (c === 'mp_caught') { fbDB.ref('leaderboards/mp_totalCaught').remove(); alert('MP Most Caught cleared.'); renderLeaderboard();
-  } else if (c === 'mp_time') { fbDB.ref('leaderboards/mp_timePlayed').remove(); alert('MP Most Time cleared.'); renderLeaderboard();
-  } else if (c === 'mp_moves') { fbDB.ref('leaderboards/mp_movesEaten').remove(); alert('MP Moved On cleared.'); renderLeaderboard();
-  } else if (c === 'mp_clean') { fbDB.ref('leaderboards/mp_cleanWaves').remove(); alert('MP Clean Waves cleared.'); renderLeaderboard();
-  } else if (c === 'daily') {
+  } else if (c === 'combined') {
+    allBoards.forEach(b => fbDB.ref('leaderboards/combined_' + b).remove());
+    alert('All Combined boards cleared.'); renderLeaderboard();
+  } else if (c === 'global') {
+    allBoards.forEach(b => fbDB.ref('leaderboards/' + b).remove());
+    alert('All Global boards cleared.'); renderLeaderboard();
+  } else if (c.startsWith('sp_') || c.startsWith('mp_')) {
+    const map = {caught:'totalCaught',time:'timePlayed',moves:'movesEaten',clean:'cleanWaves',grade:'bestGrade',wave:'highestWave'};
+    const parts = c.split('_');
+    const prefix = parts[0] + '_';
+    const board = map[parts[1]];
+    if (board) { fbDB.ref('leaderboards/' + prefix + board).remove(); alert(c + ' cleared.'); renderLeaderboard(); }
+    else { alert('Invalid board name.'); }
+  } else if (c === 'daily' || c === 'weekly' || c === 'monthly') {
     fbDB.ref('leaderboards').once('value', snap => {
       const data = snap.val() || {};
-      Object.keys(data).forEach(k => { if (k.includes('/')) fbDB.ref(`leaderboards/${k}`).remove(); }); // time-period paths have /
+      Object.keys(data).forEach(k => {
+        if (typeof data[k] === 'object') {
+          Object.keys(data[k]).forEach(sub => {
+            if (sub.includes('-')) fbDB.ref('leaderboards/' + k + '/' + sub).remove();
+          });
+        }
+      });
     });
-    alert('All daily/weekly/monthly boards cleared.'); renderLeaderboard();
-  } else if (c === 'weekly') {
-    alert('Weekly boards cleared (same as daily — time periods share structure).'); renderLeaderboard();
-  } else if (c === 'monthly') {
-    alert('Monthly boards cleared (same as daily — time periods share structure).'); renderLeaderboard();
+    alert('All time-period boards cleared.'); renderLeaderboard();
   } else {
     alert('Invalid choice. Try again.');
   }
