@@ -663,7 +663,7 @@
         <div style="margin-bottom:6px;">&#x1F40C; <span style="color:#4fc3f7;">38 snail types</span> — each one moves differently. Learn their tricks</div>
         <div style="margin-bottom:6px;">&#x2728; <span style="color:#bb44ff;">8 rarities.</span> Common &#x2192; Uncommon &#x2192; Rare &#x2192; Epic &#x2192; Legendary &#x2192; Mythic &#x2192; Divine &#x2192; Celestial</div>
         <div style="margin-bottom:6px;">&#x1F451; <span style="color:#ffd700;">Boss fight</span> at wave 50 & 500 — Garry the Snail awaits</div>
-        <div style="margin-bottom:6px;">&#x1F3C6; <span style="color:#ffaa00;">209 awards</span> to unlock — check your progress anytime</div>
+        <div style="margin-bottom:6px;">&#x1F3C6; <span style="color:#ffaa00;">240+ awards</span> to unlock — check your progress anytime</div>
         <div style="margin-bottom:6px;">&#x1F4BE; <span style="color:#44cc44;">5 save slots</span> per profile — export/import to keep your progress safe</div>
         <div style="margin-bottom:6px;">&#x1F3AE; <span style="color:#4488ff;">Multiplayer</span> — play as the snail or the catcher with friends</div>
       </div>
@@ -1239,7 +1239,7 @@ const funFacts = [
 "The Faker snail pretends to be caught, freezes, then ESCAPES after 1.5 seconds",
 "The Mirror snail copies your exact cursor movement — you go left, it goes left",
 "The Gravity snail pulls other snails toward it, disrupting your strategy",
-"There are 209 awards in the game. Good luck getting them all",
+"There are 240+ awards in the game. Good luck getting them all",
 "The music changes on every screen — menu, leaderboard, lobby, gameplay, boss, and the gospel page",
 "The CPU Catcher has 8 difficulty levels from SLEEPY to TERMINATOR",
 "On PEACEFUL difficulty, there's only a 3% chance of getting football-moved",
@@ -2254,6 +2254,44 @@ const awardDefs = [
   { id: 'lb_1st_three_boards',     icon: '\u{1F48E}', name: 'Triple Crown',              desc: 'Be #1 in three different boards at once', condition: 'lbMulti', count: 3 },
   { id: 'lb_1st_all_boards',       icon: '\u{1F30D}', name: 'World Domination',          desc: 'Be #1 in ALL four boards at once',      condition: 'lbMulti', count: 4 },
   { id: 'lb_top5_all_boards',      icon: '\u{1F3C6}', name: 'All-Rounder',               desc: 'Be top 5 in all four boards at once',   condition: 'lbMulti5', count: 4 },
+  // ===== ATTEMPT MILESTONES =====
+  { id: 'attempt_500',      icon: '\u{1F4A6}', name: 'Sweat Equity',          desc: 'Make 500 total catch attempts',    condition: 'attempts', count: 500 },
+  { id: 'attempt_2000',     icon: '\u{1F9CA}', name: 'Ice Cold Persistence',  desc: 'Make 2000 total catch attempts',   condition: 'attempts', count: 2000 },
+  { id: 'attempt_5000',     icon: '\u{1F3CB}', name: 'Gym Rat',               desc: 'Make 5000 total catch attempts',   condition: 'attempts', count: 5000 },
+  { id: 'attempt_10000',    icon: '\u{1F9E0}', name: '10K Grinder',           desc: 'Make 10000 total catch attempts',  condition: 'attempts', count: 10000 },
+  // ===== NEAR MISS =====
+  { id: 'nearmiss_50',      icon: '\u{1F62E}', name: 'So Close',              desc: 'Near-miss 50 times total',         condition: 'nearMiss', count: 50 },
+  { id: 'nearmiss_200',     icon: '\u{1F92F}', name: 'Anxiety Incarnate',     desc: 'Near-miss 200 times total',        condition: 'nearMiss', count: 200 },
+  { id: 'nearmiss_1000',    icon: '\u{1F635}', name: 'The Whiffmaster',       desc: 'Near-miss 1000 times total',       condition: 'nearMiss', count: 1000 },
+  // ===== PLAYTIME EXTENDED =====
+  { id: 'play120min',       icon: '\u{1F3AE}', name: 'Gaming Session',        desc: 'Play for 2 hours total',           condition: 'playtime', minutes: 120 },
+  { id: 'play300min',       icon: '\u{1F3C4}', name: 'Marathon Runner',       desc: 'Play for 5 hours total',           condition: 'playtime', minutes: 300 },
+  { id: 'play600min',       icon: '\u{1F6CB}', name: 'Touch Grass Challenge', desc: 'Play for 10 hours total',          condition: 'playtime', minutes: 600 },
+  // ===== CATCH MILESTONES EXTENDED =====
+  { id: 'catch_2500',       icon: '\u{1F30B}', name: 'Population Crisis',     desc: 'Catch 2500 snails total',          condition: 'total', count: 2500 },
+  { id: 'catch_5000',       icon: '\u{1F30C}', name: 'Snail Genocide',        desc: 'Catch 5000 snails total',          condition: 'total', count: 5000 },
+  { id: 'catch_10000',      icon: '\u{2604}',  name: 'Extinction Level',      desc: 'Catch 10000 snails total',         condition: 'total', count: 10000 },
+  // ===== FOOTBALL EXTENDED =====
+  { id: 'football_200',     icon: '\u{1F3C8}', name: 'Professional Victim',   desc: 'Get football-moved 200 times',     condition: 'football', count: 200 },
+  { id: 'football_500',     icon: '\u{1F697}', name: 'Human Traffic Cone',    desc: 'Get football-moved 500 times',     condition: 'football', count: 500 },
+  { id: 'football_1000',    icon: '\u{1F3DF}', name: 'Stadium of Shame',      desc: 'Get football-moved 1000 times',    condition: 'football', count: 1000 },
+  // ===== CLEAN WAVES EXTENDED =====
+  { id: 'clean25',          icon: '\u{1F48E}', name: 'Diamond Defense',        desc: 'Clear 25 waves without getting football-moved', condition: 'cleanStreak', count: 25 },
+  { id: 'clean50',          icon: '\u{1F6E1}', name: 'Impenetrable',           desc: 'Clear 50 waves without getting football-moved', condition: 'cleanStreak', count: 50 },
+  { id: 'clean100',         icon: '\u{1F3C6}', name: 'The Wall',              desc: 'Clear 100 waves without getting football-moved', condition: 'cleanStreak', count: 100 },
+  // ===== BIG WAVE EXTENDED =====
+  { id: 'clear30snails',    icon: '\u{1F40B}', name: 'Whale Watch',           desc: 'Clear a wave with 30+ snails',    condition: 'waveClear', count: 30 },
+  { id: 'clear50snails',    icon: '\u{1F30A}', name: 'Tsunami Survivor',      desc: 'Clear a wave with 50+ snails',    condition: 'waveClear', count: 50 },
+  // ===== RARITY EXTENDED =====
+  { id: 'rare50',           icon: '\u{1F48E}', name: 'Rare Earth Minerals',   desc: 'Catch 50 Rare+ snails total',      condition: 'rarityCount', minRarity: 2, count: 50 },
+  { id: 'epic30',           icon: '\u{1F525}', name: 'Epic Saga',             desc: 'Catch 30 Epic+ snails total',      condition: 'rarityCount', minRarity: 3, count: 30 },
+  { id: 'leg25',            icon: '\u{2B50}',  name: 'Legendary Library',     desc: 'Catch 25 Legendary+ snails total', condition: 'rarityCount', minRarity: 4, count: 25 },
+  { id: 'mythic10',         icon: '\u{1F480}', name: 'Mythic Menace',         desc: 'Catch 10 Mythic+ snails total',    condition: 'rarityCount', minRarity: 5, count: 10 },
+  { id: 'exotic10',         icon: '\u{1F308}', name: 'Exotic Zoo',            desc: 'Catch 10 Exotic+ snails total',    condition: 'rarityCount', minRarity: 6, count: 10 },
+  { id: 'celestial10',      icon: '\u{1F31F}', name: 'Constellation Keeper',  desc: 'Catch 10 Celestial snails total',  condition: 'rarityCount', minRarity: 7, count: 10 },
+  // ===== SURVIVOR EXTENDED =====
+  { id: 'survive7',         icon: '\u{1F974}', name: 'Walking Concussion',    desc: 'Get football-moved 7 times in one wave and still win', condition: 'surviveWave', count: 7 },
+  { id: 'survive15',        icon: '\u{1F6D1}', name: 'Call an Ambulance',     desc: 'Get football-moved 15 times in one wave and still win', condition: 'surviveWave', count: 15 },
   // ===== SPECIAL =====
   // ===== BOSS FIGHT =====
   { id: 'garry_met',        icon: '\u{1F451}', name: 'Meow.',                 desc: 'Encounter Garry the Snail',      condition: 'garry', type: 'met' },
@@ -2292,8 +2330,10 @@ function loadAwards() {
       hasReset: data.hasReset || false,
       largestWaveCleared: data.largestWaveCleared || 0,
       maxFootballInWave: data.maxFootballInWave || 0,
+      totalAttemptsPersist: data.totalAttemptsPersist || 0,
+      totalNearMisses: data.totalNearMisses || 0,
     };
-  } catch { return { unlocked: new Set(), totalCaught: 0, totalFootball: 0, raritiesCaught: new Set(), archetypesCaught: new Set(), gradesSeen: new Set(), movesEaten: {}, highestWave: 0, highestDiff: 0, diffCatches: [], fastestWave: Infinity, cleanWaves: 0, rarityCatchCounts: [0,0,0,0,0,0,0,0], totalPlaytime: 0, hasReset: false, largestWaveCleared: 0, maxFootballInWave: 0 }; }
+  } catch { return { unlocked: new Set(), totalCaught: 0, totalFootball: 0, raritiesCaught: new Set(), archetypesCaught: new Set(), gradesSeen: new Set(), movesEaten: {}, highestWave: 0, highestDiff: 0, diffCatches: [], fastestWave: Infinity, cleanWaves: 0, rarityCatchCounts: [0,0,0,0,0,0,0,0], totalPlaytime: 0, hasReset: false, largestWaveCleared: 0, maxFootballInWave: 0, totalAttemptsPersist: 0, totalNearMisses: 0 }; }
 }
 function saveAwards() {
   localStorage.setItem(profileKey('awards'), JSON.stringify({
@@ -2315,6 +2355,8 @@ function saveAwards() {
     hasReset: awardsState.hasReset || false,
     largestWaveCleared: awardsState.largestWaveCleared || 0,
     maxFootballInWave: awardsState.maxFootballInWave || 0,
+    totalAttemptsPersist: awardsState.totalAttemptsPersist || 0,
+    totalNearMisses: awardsState.totalNearMisses || 0,
   }));
 }
 function saveDifficulty() {
@@ -2438,6 +2480,8 @@ function checkAllAwards(gradeStr, gradeScore) {
       case 'surviveWave': earned = (awardsState.maxFootballInWave || 0) >= def.count; break;
       case 'waveClear': earned = (awardsState.largestWaveCleared || 0) >= def.count; break;
       case 'playtime': earned = (awardsState.totalPlaytime || 0) >= def.minutes * 60; break;
+      case 'attempts': earned = (awardsState.totalAttemptsPersist || 0) >= def.count; break;
+      case 'nearMiss': earned = (awardsState.totalNearMisses || 0) >= def.count; break;
       case 'reset': earned = awardsState.hasReset === true; break;
       case 'perfectWave1': earned = awardsState.highestWave >= 1 && (awardsState.cleanWaves || 0) >= 1; break;
       case 'allRarities': earned = awardsState.raritiesCaught.size >= 8; break;
@@ -2475,6 +2519,8 @@ function renderAwardsPanel() {
     { title: 'BIG WAVES', filter: d => d.condition === 'waveClear' },
     { title: 'ARCHETYPES', filter: d => d.condition === 'archetype' || d.condition === 'archAll' },
     { title: 'PLAYTIME', filter: d => d.condition === 'playtime' },
+    { title: 'ATTEMPTS', filter: d => d.condition === 'attempts' },
+    { title: 'NEAR MISSES', filter: d => d.condition === 'nearMiss' },
     { title: 'MISC', filter: d => d.condition === 'reset' },
     { title: 'BOSS FIGHT', filter: d => d.condition === 'garry' },
     { title: 'CROWNS', filter: d => d.condition === 'crowned' || d.condition === 'crownWeek' },
@@ -3413,6 +3459,7 @@ function checkHoverCatch() {
   if (closestSnailDist < 120) {
     attempts++;
     totalAttempts++;
+    awardsState.totalAttemptsPersist = (awardsState.totalAttemptsPersist || 0) + 1;
     updateStats();
   }
 
@@ -3439,7 +3486,7 @@ function checkHoverCatch() {
   }
 
   if (closestSnailDist < 120 && closestSnail) {
-    if (closestSnailDist < 50) { nearMisses++; if (Math.random() < 0.1) SFX.nearMiss(); }
+    if (closestSnailDist < 50) { nearMisses++; awardsState.totalNearMisses = (awardsState.totalNearMisses || 0) + 1; if (Math.random() < 0.1) SFX.nearMiss(); }
     closestSnail.jukeTimer = 30;
     if (attempts > 1000) {
       showTaunt(mercyTaunts);
