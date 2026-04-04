@@ -4986,9 +4986,9 @@ function mpGameTick() {
   updateConfetti();
 }
 
-// ============ MUSIC SYSTEM (vibes edition) ============
+// ============ MUSIC SYSTEM (game style) ============
 let musicPlaying = false, currentMusicType = '';
-let musicNodes = []; // all active nodes for cleanup
+let musicNodes = [];
 
 function startMusic(type) {
   if (musicPlaying && currentMusicType === type) return;
@@ -4996,119 +4996,125 @@ function startMusic(type) {
   try {
     const ctx = ensureAudio();
     if (ctx.state !== 'running') return;
-    const vol = 0.025 * (window._sfxVol || 0.5);
+    const vol = 0.04 * (window._sfxVol || 0.5);
     const now = ctx.currentTime;
 
-    // Master gain with fade in
     const master = ctx.createGain();
     master.gain.setValueAtTime(0, now);
-    master.gain.linearRampToValueAtTime(vol, now + 3);
+    master.gain.linearRampToValueAtTime(vol, now + 2);
     master.connect(ctx.destination);
 
-    // Lo-fi filter — makes everything warm and muffled
-    const lofi = ctx.createBiquadFilter();
-    lofi.type = 'lowpass';
-    lofi.frequency.value = 800;
-    lofi.Q.value = 1;
-    lofi.connect(master);
-
-    // === LAYER 1: Deep bass pad ===
-    const bass = ctx.createOscillator();
-    bass.type = 'sine';
-    const bassGain = ctx.createGain();
-    bassGain.gain.value = 0.6;
-    bass.connect(bassGain);
-    bassGain.connect(lofi);
-
-    // === LAYER 2: Warm chord pad (two detuned oscs) ===
-    const pad1 = ctx.createOscillator();
-    pad1.type = 'triangle';
-    const pad2 = ctx.createOscillator();
-    pad2.type = 'triangle';
-    pad2.detune.value = 8;
-    const padGain = ctx.createGain();
-    padGain.gain.value = 0.3;
-    pad1.connect(padGain);
-    pad2.connect(padGain);
-    padGain.connect(lofi);
-
-    // === LAYER 3: Sparkly high melody ===
-    const melody = ctx.createOscillator();
-    melody.type = 'sine';
-    const melGain = ctx.createGain();
-    melGain.gain.value = 0.15;
-    melody.connect(melGain);
-    melGain.connect(master); // melody goes direct, not through lofi — keeps it crisp
-
-    // Note sequences per vibe — pentatonic scale for that universal chill feel
-    const sequences = {
+    // Sequences: each has a melody, bass line, and rhythm pattern
+    // Using minor pentatonic for that sneaky/adventure game feel
+    const tracks = {
       menu: {
-        bass: [65,73,82,87,98,87,82,73],       // C2 pentatonic — deep
-        pad: [262,294,330,392,440,392,330,294],  // C4 pentatonic — warm
-        melody: [523,587,659,784,880,784,659,587], // C5 — sparkly
-        tempo: 4000, // ms per note change
+        melody: [330,392,440,523,587,523,440,392,330,294,330,392,440,523,587,659],
+        bass:   [110,110,131,131,147,147,131,131,110,110,98,98,110,110,131,131],
+        tempo: 220, // BPM feel — ms per note
       },
       leaderboard: {
-        bass: [73,82,87,98,110,98,87,82],       // slightly brighter
-        pad: [294,330,392,440,494,440,392,330],
-        melody: [587,659,784,880,988,880,784,659],
-        tempo: 3500,
+        melody: [392,440,523,587,659,587,523,440,392,330,294,330,392,440,523,587],
+        bass:   [131,131,147,147,165,165,147,147,131,131,110,110,131,131,147,147],
+        tempo: 200,
       },
       lobby: {
-        bass: [55,65,73,82,87,82,73,65],        // deeper, more mysterious
-        pad: [220,262,294,330,392,330,294,262],
-        melody: [440,523,587,659,784,659,587,523],
-        tempo: 4500,
+        melody: [294,330,392,440,392,330,294,262,294,330,392,440,523,440,392,330],
+        bass:   [98,98,110,110,131,131,110,110,98,98,87,87,98,98,110,110],
+        tempo: 250,
       },
     };
 
-    const seq = sequences[type] || sequences.menu;
-    let noteIdx = 0;
+    const track = tracks[type] || tracks.menu;
+    let step = 0;
 
-    bass.frequency.value = seq.bass[0];
-    pad1.frequency.value = seq.pad[0];
-    pad2.frequency.value = seq.pad[0];
-    melody.frequency.value = seq.melody[0];
+    // Melody — square wave for that retro game sound
+    const melOsc = ctx.createOscillator();
+    melOsc.type = 'square';
+    const melGain = ctx.createGain();
+    melGain.gain.value = 0.12;
+    // Soften the square wave
+    const melFilter = ctx.createBiquadFilter();
+    melFilter.type = 'lowpass';
+    melFilter.frequency.value = 2000;
+    melOsc.connect(melFilter);
+    melFilter.connect(melGain);
+    melGain.connect(master);
 
-    bass.start(now);
-    pad1.start(now);
-    pad2.start(now);
-    melody.start(now);
+    // Bass — triangle wave, deep
+    const bassOsc = ctx.createOscillator();
+    bassOsc.type = 'triangle';
+    const bassGain = ctx.createGain();
+    bassGain.gain.value = 0.35;
+    bassOsc.connect(bassGain);
+    bassGain.connect(master);
 
-    musicNodes = [bass, pad1, pad2, melody, master, lofi, bassGain, padGain, melGain];
+    // Harmony — sine, subtle
+    const harmOsc = ctx.createOscillator();
+    harmOsc.type = 'sine';
+    const harmGain = ctx.createGain();
+    harmGain.gain.value = 0.08;
+    harmOsc.connect(harmGain);
+    harmGain.connect(master);
+
+    // Kick drum simulation — low frequency pulse
+    const kickOsc = ctx.createOscillator();
+    kickOsc.type = 'sine';
+    kickOsc.frequency.value = 55;
+    const kickGain = ctx.createGain();
+    kickGain.gain.value = 0;
+    kickOsc.connect(kickGain);
+    kickGain.connect(master);
+
+    melOsc.frequency.value = track.melody[0];
+    bassOsc.frequency.value = track.bass[0];
+    harmOsc.frequency.value = track.melody[0] * 1.5; // fifth harmony
+
+    melOsc.start(now);
+    bassOsc.start(now);
+    harmOsc.start(now);
+    kickOsc.start(now);
+
+    musicNodes = [melOsc, bassOsc, harmOsc, kickOsc, master, melGain, bassGain, harmGain, kickGain, melFilter];
     musicPlaying = true;
     currentMusicType = type;
 
-    // Smooth note transitions
+    // Step sequencer — plays notes in rhythm
     window._musicInterval = setInterval(() => {
       try {
-        noteIdx = (noteIdx + 1) % seq.bass.length;
+        step = (step + 1) % track.melody.length;
         const t = ctx.currentTime;
-        bass.frequency.linearRampToValueAtTime(seq.bass[noteIdx], t + 2);
-        pad1.frequency.linearRampToValueAtTime(seq.pad[noteIdx], t + 2.5);
-        pad2.frequency.linearRampToValueAtTime(seq.pad[noteIdx], t + 3);
-        melody.frequency.linearRampToValueAtTime(seq.melody[noteIdx], t + 1.5);
+        const mel = track.melody[step];
+        const bas = track.bass[step];
 
-        // Gentle melody volume pulse — breathing effect
-        melGain.gain.linearRampToValueAtTime(0.08 + Math.random() * 0.12, t + 1);
-        melGain.gain.linearRampToValueAtTime(0.15, t + 2);
-      } catch(e) {}
-    }, seq.tempo);
+        // Melody — quick pitch change for that bouncy feel
+        melOsc.frequency.setValueAtTime(mel, t);
+        harmOsc.frequency.setValueAtTime(mel * 1.5, t); // perfect fifth
+        bassOsc.frequency.setValueAtTime(bas, t);
 
-    // Slow LFO on the filter — gives it that lo-fi wobble
-    window._musicLFO = setInterval(() => {
-      try {
-        const t = ctx.currentTime;
-        lofi.frequency.linearRampToValueAtTime(600 + Math.sin(t * 0.3) * 300, t + 2);
+        // Melody volume envelope — plucky attack
+        melGain.gain.setValueAtTime(0.15, t);
+        melGain.gain.linearRampToValueAtTime(0.08, t + track.tempo/1000 * 0.8);
+
+        // Kick on every 4th step
+        if (step % 4 === 0) {
+          kickGain.gain.setValueAtTime(0.25, t);
+          kickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+          kickOsc.frequency.setValueAtTime(80, t);
+          kickOsc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
+        }
+        // Hi-hat feel on every 2nd step (using melody filter)
+        if (step % 2 === 0) {
+          melFilter.frequency.setValueAtTime(3000, t);
+          melFilter.frequency.linearRampToValueAtTime(1500, t + 0.1);
+        }
       } catch(e) {}
-    }, 2000);
+    }, track.tempo);
 
   } catch(e) {}
 }
 
 function stopMusic() {
   if (window._musicInterval) { clearInterval(window._musicInterval); window._musicInterval = null; }
-  if (window._musicLFO) { clearInterval(window._musicLFO); window._musicLFO = null; }
   musicNodes.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
   musicNodes = [];
   musicPlaying = false;
