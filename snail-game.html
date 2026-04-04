@@ -4702,7 +4702,14 @@ function mpGameTick() {
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
   ctx.fillText('R' + mpRoundNum + '/' + mpTotalRounds + '  |  ' + aliveSnails + '/' + totalSnailCount + ' snails', canvas.width / 2, 52);
 
-  // Top left: CPU catcher level
+  // Top right: Snail difficulty (same as singleplayer)
+  const diffInfo = diffLevels[difficulty];
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = diffInfo.color;
+  ctx.fillText(diffInfo.name, canvas.width - 90, 15);
+
+  // Top left: CPU catcher level (only if CPU catcher)
   if (mpLobbyData?.settings?.cpuCatcher === 'yes') {
     const lvl = cpuCatcherLevels[getCpuCatcherLevel()];
     ctx.textAlign = 'left';
