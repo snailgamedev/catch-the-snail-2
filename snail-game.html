@@ -859,7 +859,7 @@
     <span id="diff-meter"><span id="diff-fill" style="width:10%;background:#44cc44"></span></span>
   </div>
 </div>
-<button id="awards-btn">AWARDS (0/202)</button>
+<button id="awards-btn">AWARDS (0/207)</button>
 <div id="award-popup">
   <div class="popup-icon" id="popup-icon"></div>
   <div class="popup-title">AWARD UNLOCKED!</div>
@@ -1948,6 +1948,13 @@ const awardDefs = [
   { id: 'lb_1st_all_boards',       icon: '\u{1F30D}', name: 'World Domination',          desc: 'Be #1 in ALL four boards at once',      condition: 'lbMulti', count: 4 },
   { id: 'lb_top5_all_boards',      icon: '\u{1F3C6}', name: 'All-Rounder',               desc: 'Be top 5 in all four boards at once',   condition: 'lbMulti5', count: 4 },
   // ===== SPECIAL =====
+  // ===== BOSS FIGHT =====
+  { id: 'garry_met',        icon: '\u{1F451}', name: 'Meow.',                 desc: 'Encounter Garry the Snail',      condition: 'garry', type: 'met' },
+  { id: 'garry_hit',        icon: '\u{1F4A5}', name: 'You Hit the King',      desc: 'Deal damage to Garry',           condition: 'garry', type: 'hit' },
+  { id: 'garry_defeated',   icon: '\u{1F451}', name: 'Garry Slayer',          desc: 'Defeat Garry the Snail (Wave 50)', condition: 'garry', type: 'defeated' },
+  { id: 'garry_ultra',      icon: '\u{1F31F}', name: 'ULTRA Garry Slayer',    desc: 'Defeat ULTRA Garry (Wave 500)',   condition: 'garry', type: 'ultra' },
+  { id: 'garry_nohit',      icon: '\u{1F48E}', name: 'Flawless Victory',      desc: 'Beat Garry without getting football-moved', condition: 'garry', type: 'nohit' },
+  // ===== SPECIAL =====
   { id: 'all_awards',      icon: '\u{1F3C6}', name: 'Completionist',         desc: 'Unlock every other award',       condition: 'allAwards' },
 ];
 
@@ -2116,6 +2123,7 @@ function checkAllAwards(gradeStr, gradeScore) {
       case 'reset': earned = awardsState.hasReset === true; break;
       case 'perfectWave1': earned = awardsState.highestWave >= 1 && (awardsState.cleanWaves || 0) >= 1; break;
       case 'allRarities': earned = awardsState.raritiesCaught.size >= 8; break;
+      case 'garry': earned = false; break; // garry awards checked directly via checkAward
       case 'allAwards': earned = awardsState.unlocked.size >= awardDefs.length - 1; break;
     }
     if (earned) checkAward(def.id);
@@ -2148,6 +2156,7 @@ function renderAwardsPanel() {
     { title: 'ARCHETYPES', filter: d => d.condition === 'archetype' || d.condition === 'archAll' },
     { title: 'PLAYTIME', filter: d => d.condition === 'playtime' },
     { title: 'MISC', filter: d => d.condition === 'reset' },
+    { title: 'BOSS FIGHT', filter: d => d.condition === 'garry' },
     { title: 'LEADERBOARD PLACEMENTS', filter: d => d.condition === 'lb' || d.condition === 'lbMulti' || d.condition === 'lbMulti5' },
     { title: 'SPECIAL', filter: d => d.id === 'all_awards' || d.id === 'all_rarities' },
   ];
@@ -2289,6 +2298,278 @@ function createSnail(speedMultiplier, snailData) {
   };
 }
 
+// ============ GARRY THE SNAIL — BOSS FIGHT ============
+let garryActive = false;
+let garryHP = 0;
+let garryMaxHP = 0;
+let garryPhase = 0;
+
+const garryTaunts = [
+  "you think you can catch ME?!",
+  "i'm GARRY. THE Garry.",
+  "meow.",
+  "this isn't even my final form",
+  "i've been training for this moment",
+  "you're gonna need a bigger cursor",
+  "lol you're still trying?",
+  "i eat catchers for breakfast",
+  "GARRY GANG",
+  "you activated my trap card",
+  "this is MY wave",
+  "i don't get caught. i GET you.",
+  "bow before the king of snails",
+  "they call me the uncatchable",
+  "your cursor means nothing here",
+  "i move different. literally.",
+];
+
+function isGarryWave() {
+  return wave === 50 || wave === 500;
+}
+
+function createGarry(waveNum) {
+  const isUltra = waveNum === 500;
+  garryActive = true;
+  garryHP = isUltra ? 10 : 5; // need to catch him multiple times
+  garryMaxHP = garryHP;
+  garryPhase = 0;
+
+  return {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    baseSpeed: isUltra ? 4.0 : 2.5,
+    angle: Math.random() * Math.PI * 2,
+    jukeTimer: 0, jukeCooldown: 0,
+    trail: [], mimicTrail: [],
+    alive: true, id: 'garry',
+    hue: 45, // golden shell
+    saturation: undefined,
+    type: 'Garry', // special type
+    typeIndex: 0,
+    snailName: isUltra ? 'ULTRA GARRY' : 'GARRY THE SNAIL',
+    rarityIdx: 7, // Celestial
+    rarity: rarities[7],
+    catchRadius: isUltra ? 15 : 20,
+    isGarry: true,
+    isUltraGarry: isUltra,
+    // All the AI fields
+    zigzagDir: 0, zigzagTimer: 0,
+    tricksterCharged: true,
+    ghostVisible: true, ghostTimer: 0,
+    teleportCooldown: 0,
+    orbitAngle: Math.random() * Math.PI * 2,
+    _dashTimer: 0,
+  };
+}
+
+// Garry uses ALL archetype behaviors — switches randomly
+function updateGarry(snail) {
+  const dx = mouse.x - snail.x;
+  const dy = mouse.y - snail.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const angleToMouse = Math.atan2(dy, dx);
+  let speed = snail.baseSpeed;
+  let targetAngle = angleToMouse + Math.PI;
+
+  // Garry switches behavior every 3 seconds based on phase
+  const behavior = Math.floor(time / 180) % 8;
+
+  switch (behavior) {
+    case 0: // Runner — pure speed
+      if (dist < 300) speed *= 3;
+      if (dist < 100) speed *= 5;
+      targetAngle += (Math.random() - 0.5) * 0.2;
+      break;
+    case 1: // Teleporter
+      if (dist < 80 && snail.teleportCooldown <= 0) {
+        snail.x = 30 + Math.random() * (canvas.width - 60);
+        snail.y = 30 + Math.random() * (canvas.height - 60);
+        snail.teleportCooldown = 60;
+      }
+      snail.teleportCooldown = Math.max(0, snail.teleportCooldown - 1);
+      speed *= 2;
+      break;
+    case 2: // Orbiter
+      snail.orbitAngle += 0.06;
+      const orbitR = 100;
+      const tx = mouse.x + Math.cos(snail.orbitAngle) * orbitR;
+      const ty = mouse.y + Math.sin(snail.orbitAngle) * orbitR;
+      targetAngle = Math.atan2(ty - snail.y, tx - snail.x);
+      speed *= 3;
+      if (dist < 50) { snail.orbitAngle += 0.2; speed *= 4; }
+      break;
+    case 3: // Trickster — bait then burst
+      if (dist > 150) { speed *= 0.3; } // crawl
+      else if (dist < 60) { speed *= 12; targetAngle += (Math.random()-0.5)*0.5; } // BURST
+      else { speed *= 1.5; }
+      break;
+    case 4: // Juker — pure chaos
+      if (Math.random() < 0.2) snail.angle += (Math.random()-0.5) * Math.PI * 2;
+      targetAngle = snail.angle;
+      speed *= 3;
+      if (dist < 80) { targetAngle = Math.random() * Math.PI * 2; speed *= 5; }
+      break;
+    case 5: // Dasher — sit then dash
+      if (!snail._dashTimer) snail._dashTimer = 0;
+      snail._dashTimer++;
+      if (snail._dashTimer < 40) { speed *= 0.05; }
+      else if (snail._dashTimer < 55) { speed *= 15; targetAngle = angleToMouse + Math.PI + (Math.random()-0.5); }
+      else { snail._dashTimer = 0; }
+      break;
+    case 6: // Zigzag
+      snail.zigzagTimer--;
+      if (snail.zigzagTimer <= 0) { snail.zigzagDir = (snail.zigzagDir+1)%4; snail.zigzagTimer = 10+Math.random()*15; }
+      targetAngle = [0, Math.PI/2, Math.PI, Math.PI*1.5][snail.zigzagDir];
+      speed *= 4;
+      break;
+    case 7: // Ghost — phase in and out
+      snail.ghostTimer++;
+      snail.ghostVisible = Math.floor(snail.ghostTimer / 90) % 2 === 0;
+      speed *= 2;
+      if (dist < 100) speed *= 3;
+      break;
+  }
+
+  // Garry taunts more often
+  if (dist < 120 && Math.random() < 0.02) {
+    showTaunt(garryTaunts);
+  }
+
+  // Juke timer
+  if (snail.jukeTimer > 0) {
+    snail.jukeTimer--;
+    targetAngle = angleToMouse + Math.PI/2 * ((snail.jukeTimer%10<5)?1:-1);
+    speed *= 2;
+  }
+
+  let angleDiff = targetAngle - snail.angle;
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+  snail.angle += angleDiff * 0.2;
+
+  snail.x += Math.cos(snail.angle) * speed;
+  snail.y += Math.sin(snail.angle) * speed;
+  clampSnail(snail);
+  addTrail(snail);
+}
+
+// Draw Garry — bigger, golden, with HP bar
+function drawGarry(snail) {
+  if (!snail.alive) return;
+  // Draw trail
+  for (let t of snail.trail) {
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 215, 0, ${t.alpha})`;
+    ctx.fill();
+    t.alpha *= 0.97;
+  }
+  snail.trail = snail.trail.filter(t => t.alpha > 0.01);
+
+  const ghostAlpha = snail.ghostVisible ? 1 : 0.15;
+
+  // Glow ring — pulsing gold
+  ctx.save();
+  ctx.globalAlpha = ghostAlpha;
+  ctx.translate(snail.x, snail.y);
+
+  const glowSize = 40 + Math.sin(time * 0.08) * 8;
+  ctx.beginPath();
+  ctx.arc(0, 0, glowSize, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 215, 0, 0.15)';
+  ctx.fill();
+  // Second glow ring
+  ctx.beginPath();
+  ctx.arc(0, 0, glowSize + 15, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const facing = Math.cos(snail.angle) > 0 ? 1 : -1;
+  ctx.scale(facing * 1.5, 1.5); // Garry is 1.5x bigger
+
+  // Shell — golden
+  ctx.beginPath();
+  ctx.arc(0, -12, 18, 0, Math.PI * 2);
+  ctx.fillStyle = '#daa520';
+  ctx.fill();
+  ctx.strokeStyle = '#b8860b';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Shell spiral
+  ctx.beginPath();
+  ctx.arc(-3, -14, 10, 0, Math.PI * 1.5);
+  ctx.strokeStyle = '#ffd700';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Body
+  ctx.beginPath();
+  ctx.ellipse(5, 2, 22, 8, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#f0c878';
+  ctx.fill();
+  // Head
+  ctx.beginPath();
+  ctx.arc(22, -2, 8, 0, Math.PI * 2);
+  ctx.fillStyle = '#e8c070';
+  ctx.fill();
+  // Eyes — angry/determined
+  ctx.beginPath();
+  ctx.arc(24, -18, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(25, -17, 2, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff0000'; // red eyes
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(18, -20, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(19, -19, 2, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff0000';
+  ctx.fill();
+  // Eye stalks
+  ctx.beginPath();
+  ctx.moveTo(20, -6); ctx.lineTo(24, -18);
+  ctx.moveTo(18, -6); ctx.lineTo(18, -20);
+  ctx.strokeStyle = '#e8c070';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Crown
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.moveTo(10, -28); ctx.lineTo(14, -35); ctx.lineTo(18, -28);
+  ctx.lineTo(22, -38); ctx.lineTo(26, -28); ctx.lineTo(30, -33); ctx.lineTo(34, -28);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+
+  // HP Bar above Garry
+  ctx.save();
+  ctx.globalAlpha = ghostAlpha;
+  const barW = 60, barH = 6;
+  const barX = snail.x - barW/2, barY = snail.y - 55;
+  ctx.fillStyle = '#333';
+  ctx.fillRect(barX, barY, barW, barH);
+  const hpPct = garryHP / garryMaxHP;
+  ctx.fillStyle = hpPct > 0.5 ? '#44cc44' : hpPct > 0.25 ? '#ffaa00' : '#ff4444';
+  ctx.fillRect(barX, barY, barW * hpPct, barH);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+  // Name
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(snail.snailName, snail.x, barY - 5);
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = '#ff4444';
+  ctx.fillText('BOSS', snail.x, barY - 16);
+  ctx.restore();
+}
+
 function initWave() {
   snails = [];
   snailsCaught = 0;
@@ -2304,11 +2585,31 @@ function initWave() {
   framesInRange = 0;
   footballMovesHit = 0;
   cutsceneActive = false;
-  const speedMult = 1 + (wave - 1) * 0.25;
-  const picks = pickSnailsForWave(wave);
-  for (const snailData of picks) {
-    snails.push(createSnail(speedMult, snailData));
+  garryActive = false;
+
+  // BOSS WAVE CHECK
+  if (isGarryWave()) {
+    // Boss fight — Garry + a few regular snails
+    startMusic('boss');
+    const garry = createGarry(wave);
+    snails.push(garry);
+    checkAward('garry_met');
+    // Add some minion snails too
+    const minionCount = wave === 500 ? 8 : 4;
+    const speedMult = 1 + (wave - 1) * 0.25;
+    const picks = pickSnailsForWave(minionCount);
+    for (const snailData of picks) {
+      snails.push(createSnail(speedMult, snailData));
+    }
+    totalSnailsThisWave = snails.length;
+  } else {
+    const speedMult = 1 + (wave - 1) * 0.25;
+    const picks = pickSnailsForWave(wave);
+    for (const snailData of picks) {
+      snails.push(createSnail(speedMult, snailData));
+    }
   }
+
   document.getElementById('win-screen').style.display = 'none';
   updateStats();
   SFX.waveStart();
@@ -2826,9 +3127,34 @@ function showTaunt(list) {
 }
 
 function catchSnail(s) {
+  // GARRY BOSS — takes multiple hits
+  if (s.isGarry && garryHP > 1) {
+    garryHP--;
+    garryPhase = Math.floor((1 - garryHP / garryMaxHP) * 3);
+    spawnConfetti(s.x, s.y);
+    SFX.footballHit();
+    checkAward('garry_hit');
+    // Garry gets faster each hit
+    s.baseSpeed *= 1.15;
+    // Garry teleports after being hit
+    s.x = 30 + Math.random() * (canvas.width - 60);
+    s.y = 30 + Math.random() * (canvas.height - 60);
+    showTaunt(garryTaunts);
+    return; // not dead yet
+  }
+
   s.alive = false;
+  if (s.isGarry) {
+    garryActive = false; garryHP = 0;
+    checkAward('garry_defeated');
+    if (s.isUltraGarry) checkAward('garry_ultra');
+    if (footballMovesHit === 0) checkAward('garry_nohit');
+    startMusic('gameplay'); // back to normal music after boss
+  }
   snailsCaught++;
   spawnConfetti(s.x, s.y);
+  spawnConfetti(s.x + 50, s.y - 30);
+  spawnConfetti(s.x - 50, s.y + 30);
   SFX.catch();
 
   // Track for awards
@@ -4881,6 +5207,46 @@ function startMusic(type) {
       } catch(e) {} }, 150));
     }
 
+    else if (type === 'boss') {
+      // BOSS FIGHT: Epic, intense, heavy — Garry demands respect
+      const lead = ctx.createOscillator(); lead.type = 'sawtooth';
+      const leadG = ctx.createGain(); leadG.gain.value = 0.08;
+      const leadF = ctx.createBiquadFilter(); leadF.type = 'lowpass'; leadF.frequency.value = 2000;
+      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
+      const bass = ctx.createOscillator(); bass.type = 'square';
+      const bassG = ctx.createGain(); bassG.gain.value = 0.2;
+      const bassF = ctx.createBiquadFilter(); bassF.type = 'lowpass'; bassF.frequency.value = 300;
+      bass.connect(bassF); bassF.connect(bassG); bassG.connect(master);
+      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 50;
+      const kickG = ctx.createGain(); kickG.gain.value = 0;
+      kick.connect(kickG); kickG.connect(master);
+      const alarm = ctx.createOscillator(); alarm.type = 'sine';
+      const alarmG = ctx.createGain(); alarmG.gain.value = 0;
+      alarm.connect(alarmG); alarmG.connect(master);
+      // E minor HEAVY — boss fight energy
+      const mel = [164,196,233,262,311,330,311,262,233,196,164,147,131,147,164,196,233,311,330,392,330,311,262,233];
+      const basN = [41,41,41,41,49,49,49,49,55,55,55,55,49,49,49,49,41,41,41,41,37,37,37,37];
+      let step = 0;
+      lead.frequency.value = mel[0]; bass.frequency.value = basN[0]; alarm.frequency.value = 880;
+      lead.start(now); bass.start(now); kick.start(now); alarm.start(now);
+      musicNodes = [lead, bass, kick, alarm, master, leadG, bassG, kickG, alarmG, leadF, bassF];
+      musicTimers.push(setInterval(() => { try {
+        step = (step+1) % mel.length;
+        const t = ctx.currentTime;
+        lead.frequency.setValueAtTime(mel[step], t);
+        bass.frequency.setValueAtTime(basN[step], t);
+        leadG.gain.setValueAtTime(0.12, t);
+        leadG.gain.linearRampToValueAtTime(0.05, t + 0.1);
+        // Heavy double kick
+        if (step % 2 === 0) { kickG.gain.setValueAtTime(0.35, t); kickG.gain.exponentialRampToValueAtTime(0.001, t+0.12); kick.frequency.setValueAtTime(90, t); kick.frequency.exponentialRampToValueAtTime(30, t+0.1); }
+        if (step % 2 === 1) { kickG.gain.setValueAtTime(0.2, t); kickG.gain.exponentialRampToValueAtTime(0.001, t+0.08); }
+        // Warning alarm on phase changes
+        if (step % 12 === 0) { alarmG.gain.setValueAtTime(0.04, t); alarmG.gain.linearRampToValueAtTime(0, t + 0.3); }
+        // Aggressive filter
+        leadF.frequency.setValueAtTime(1500 + Math.sin(t * 2) * 800, t);
+      } catch(e) {} }, 160));
+    }
+
     else if (type === 'gameplay') {
       // GAMEPLAY: Tense chase — driving beat, minor key tension, building intensity
       const lead = ctx.createOscillator(); lead.type = 'sawtooth';
@@ -5429,13 +5795,16 @@ function gameLoop() {
 
   if (!paused) {
     for (let s of snails) {
-      if (s.alive && !cutsceneActive) updateSnail(s);
+      if (s.alive && !cutsceneActive) {
+        if (s.isGarry) updateGarry(s);
+        else updateSnail(s);
+      }
     }
     checkHoverCatch();
   }
   drawBackground();
   for (let s of snails) {
-    if (s.alive) drawSnailAt(s);
+    if (s.alive) { if (s.isGarry) drawGarry(s); else drawSnailAt(s); }
   }
   drawCutsceneEffects();
   drawCursor();
