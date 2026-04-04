@@ -775,6 +775,8 @@
       <h1 style="margin-top:-5px;">LEADERBOARDS</h1>
       <div id="lb-quote" style="color:#888;font-size:clamp(10px,2.2vw,12px);font-style:italic;max-width:300px;margin:5px auto;line-height:1.3;"></div>
     </div>
+    <!-- Admin announcements banner -->
+    <div id="lb-announcement" style="display:none;background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.2);border-radius:8px;padding:8px 14px;margin-bottom:10px;max-width:350px;width:100%;color:#ffd700;font-size:clamp(11px,2.5vw,13px);text-align:center;line-height:1.4;"></div>
     <!-- Mode tabs — pill style -->
     <div style="display:flex;background:rgba(255,255,255,0.05);border-radius:20px;padding:3px;margin-bottom:10px;max-width:350px;width:100%;">
       <button class="menu-btn lb-mode" data-mode="global" style="background:#ffd700;color:#1a1a2e;padding:6px 0;font-size:clamp(10px,2.2vw,12px);border-radius:18px;flex:1;">GLOBAL</button>
@@ -5472,6 +5474,8 @@ function mpSetupListeners() {
 
     // Round end detection for non-host
     if (game.state === 'roundEnd' && mpMode && !mpRoundEnding) {
+      // If cutscene is active, end it first before processing round end
+      if (cutsceneActive) endCutscene();
       const anyAlive = Object.values(game.snails || {}).some(s => s.alive);
       mpRoundEnd(anyAlive ? 'snails' : 'catcher');
     }
@@ -5745,19 +5749,37 @@ function mpGameTick() {
     }
   }
 
-  // Cutscene timer
+  // Cutscene timer — with safety timeout so MP never permanently freezes
   if (cutsceneActive) {
     cutsceneTimer--;
     if (cutsceneTimer <= 0) endCutscene();
+    // Safety: force-end cutscene if stuck for more than 5 seconds (300 frames)
+    if (cutsceneTimer < -300) { endCutscene(); console.warn('Cutscene force-ended (safety timeout)'); }
+  }
+
+  // Safety: if mpRoundEnding has been true for over 10 seconds, force reset
+  if (mpRoundEnding) {
+    if (!window._mpRoundEndStart) window._mpRoundEndStart = time;
+    if (time - window._mpRoundEndStart > 600) {
+      console.warn('MP round end stuck — force resetting');
+      mpRoundEnding = false;
+      window._mpRoundEndStart = null;
+    }
+  } else {
+    window._mpRoundEndStart = null;
   }
 
   const headStartActive = mpHeadStart > 0;
   if (headStartActive) mpHeadStart--;
 
   // Local timer tick
-  if (!headStartActive && !mpRoundEnding && mpTimer > 0) {
-    mpTimer -= 1/60;
-    if (mpTimer <= 0 && mpIsHost) { mpTimer = 0; mpRoundEnd('snails'); }
+  if (!headStartActive && !mpRoundEnding) {
+    if (mpTimer > 0) {
+      mpTimer -= 1/60;
+      if (mpTimer <= 0 && mpIsHost) { mpTimer = 0; mpRoundEnd('snails'); }
+    }
+    // Safety: if timer went negative (host lagged), non-host forces round end
+    if (mpTimer < -5 && !mpIsHost) { mpTimer = 0; mpRoundEnd('snails'); }
   }
 
   // Snail player movement
@@ -7919,23 +7941,28 @@ document.getElementById('lb-admin-clear').addEventListener('click', () => {
   const allPrefixes = ['','sp_','mp_','combined_'];
 
   if (c === 'all') {
-    fbDB.ref('leaderboards').remove().then(() => { alert('All leaderboards cleared.'); renderLeaderboard(); });
+    fbDB.ref('leaderboards').remove().then(() => { postAnnouncement('\u{1F4A3} ALL leaderboards have been wiped by ' + getGamertag() + '!'); alert('All leaderboards cleared.'); renderLeaderboard(); });
   } else if (['totalcaught','timeplayed','moveseaten','cleanwaves','bestgrade','highestwave'].includes(c)) {
     const boardMap = {totalcaught:'totalCaught',timeplayed:'timePlayed',moveseaten:'movesEaten',cleanwaves:'cleanWaves',bestgrade:'bestGrade',highestwave:'highestWave'};
     const board = boardMap[c];
     allPrefixes.forEach(p => fbDB.ref('leaderboards/' + p + board).remove());
+    postAnnouncement('\u{1F9F9} ' + board + ' leaderboards cleared by ' + getGamertag());
     alert(`All ${board} boards cleared.`); renderLeaderboard();
   } else if (c === 'sp') {
     allBoards.forEach(b => fbDB.ref('leaderboards/sp_' + b).remove());
+    postAnnouncement('\u{1F9F9} All Singleplayer boards cleared by ' + getGamertag());
     alert('All SP boards cleared.'); renderLeaderboard();
   } else if (c === 'mp') {
     allBoards.forEach(b => fbDB.ref('leaderboards/mp_' + b).remove());
+    postAnnouncement('\u{1F9F9} All Multiplayer boards cleared by ' + getGamertag());
     alert('All MP boards cleared.'); renderLeaderboard();
   } else if (c === 'combined') {
     allBoards.forEach(b => fbDB.ref('leaderboards/combined_' + b).remove());
+    postAnnouncement('\u{1F9F9} All Combined boards cleared by ' + getGamertag());
     alert('All Combined boards cleared.'); renderLeaderboard();
   } else if (c === 'global') {
     allBoards.forEach(b => fbDB.ref('leaderboards/' + b).remove());
+    postAnnouncement('\u{1F9F9} All Global boards cleared by ' + getGamertag());
     alert('All Global boards cleared.'); renderLeaderboard();
   } else if (c.startsWith('sp_') || c.startsWith('mp_')) {
     const map = {caught:'totalCaught',time:'timePlayed',moves:'movesEaten',clean:'cleanWaves',grade:'bestGrade',wave:'highestWave'};
@@ -7955,6 +7982,7 @@ document.getElementById('lb-admin-clear').addEventListener('click', () => {
         }
       });
     });
+    postAnnouncement('\u{1F9F9} All ' + c + ' boards cleared by ' + getGamertag());
     alert('All time-period boards cleared.'); renderLeaderboard();
   } else {
     alert('Invalid choice. Try again.');
@@ -7993,6 +8021,7 @@ document.getElementById('lb-admin-crown').addEventListener('click', () => {
     const removeTag = prompt('Gamertag to remove crown from:');
     if (!removeTag) return;
     fbDB.ref('crowns/' + removeTag.trim()).remove();
+    postAnnouncement('\u{274C} Crown removed from ' + removeTag.trim() + ' by ' + getGamertag());
     alert('Crown removed from ' + removeTag.trim());
     renderLeaderboard();
     return;
@@ -8026,14 +8055,47 @@ document.getElementById('lb-admin-crown').addEventListener('click', () => {
     reason: reason,
   });
 
+  postAnnouncement('\u{1F451} ' + g + ' has been CROWNED by ' + getGamertag() + '!' + (reason ? ' — ' + reason : ''));
   alert('\u{1F451} ' + g + ' has been crowned!' + (expires ? ' Until ' + new Date(expires).toLocaleDateString() : ' Forever!'));
   renderLeaderboard();
 });
+
+// ============ ADMIN ANNOUNCEMENTS ============
+function postAnnouncement(msg) {
+  if (!fbDB) return;
+  fbDB.ref('announcements').push({
+    message: msg,
+    by: getGamertag() || 'Admin',
+    timestamp: Date.now(),
+    expires: Date.now() + 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+function renderAnnouncements() {
+  if (!fbDB) return;
+  const banner = document.getElementById('lb-announcement');
+  if (!banner) return;
+  fbDB.ref('announcements').orderByChild('expires').startAt(Date.now()).limitToLast(3).once('value', snap => {
+    const msgs = [];
+    snap.forEach(child => {
+      const d = child.val();
+      if (d.expires > Date.now()) msgs.push(d);
+    });
+    if (msgs.length === 0) { banner.style.display = 'none'; return; }
+    banner.style.display = 'block';
+    banner.innerHTML = msgs.map(m => {
+      const ago = Math.floor((Date.now() - m.timestamp) / 60000);
+      const timeStr = ago < 1 ? 'just now' : ago + 'm ago';
+      return '<div style="margin:4px 0;"><span style="color:#ffd700;">\u{1F4E2}</span> ' + m.message + ' <span style="color:#666;font-size:10px;">(' + timeStr + ')</span></div>';
+    }).join('');
+  });
+}
 
 document.getElementById('menu-leaderboard-btn').addEventListener('click', () => {
   SFX.uiClick();
   showMenuScreen('menu-leaderboard-screen');
   startMusic('leaderboard');
+  renderAnnouncements();
   // Random leaderboard quote
   const lbQuotes = [
     "legends aren't born. they're ranked.",
