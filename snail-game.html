@@ -1070,18 +1070,31 @@ function getTimePeriodKey(period) {
 }
 
 function updateLeaderboard(gamertag, totalCaught, totalPlaytime, totalMoves, cleanWaves, mode, bestGradeScore) {
-  if (!fbUser) return;
+  if (!fbUser || !fbDB) return;
   const uid = fbUser.uid;
   const ts = Date.now();
-  const boards = { totalCaught, timePlayed: Math.floor(totalPlaytime), movesEaten: totalMoves, cleanWaves, bestGrade: bestGradeScore || 0, highestWave: wave || 0 };
-  // Write to mode-specific (sp_ or mp_) AND global
-  const prefixes = mode === 'mp' ? ['', 'mp_'] : ['', 'sp_'];
+  const modeBoards = { totalCaught, timePlayed: Math.floor(totalPlaytime), movesEaten: totalMoves, cleanWaves, bestGrade: bestGradeScore || 0, highestWave: wave || 0 };
+  const modePrefix = mode === 'mp' ? 'mp_' : 'sp_';
   const periods = ['alltime','daily','weekly','monthly'];
-  prefixes.forEach(pre => {
-    periods.forEach(period => {
-      const pk = period === 'alltime' ? '' : `/${getTimePeriodKey(period)}`;
-      Object.entries(boards).forEach(([board, value]) => {
-        fbDB.ref(`leaderboards/${pre}${board}${pk}/${uid}`).set({ gamertag, value, updated: ts });
+
+  // Write mode-specific boards
+  periods.forEach(period => {
+    const pk = period === 'alltime' ? '' : '/' + getTimePeriodKey(period);
+    Object.entries(modeBoards).forEach(([board, value]) => {
+      fbDB.ref('leaderboards/' + modePrefix + board + pk + '/' + uid).set({ gamertag, value, updated: ts });
+    });
+  });
+
+  // Global = read both SP and MP, take the HIGHER value for each board
+  periods.forEach(period => {
+    const pk = period === 'alltime' ? '' : '/' + getTimePeriodKey(period);
+    Object.entries(modeBoards).forEach(([board, value]) => {
+      const globalRef = fbDB.ref('leaderboards/' + board + pk + '/' + uid);
+      globalRef.once('value', snap => {
+        const existing = snap.exists() ? snap.val().value || 0 : 0;
+        // For grades, higher number = better grade. For everything else, higher = better.
+        const best = Math.max(existing, value);
+        globalRef.set({ gamertag, value: best, updated: ts });
       });
     });
   });
