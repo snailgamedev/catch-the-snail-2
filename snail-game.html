@@ -5575,10 +5575,51 @@ document.querySelectorAll('.inbox-filter').forEach(btn => {
 document.getElementById('inbox-clear-all').addEventListener('click', () => {
   SFX.uiClick();
   if (!isDevUser()) return;
-  if (!confirm('Delete ALL feedback? This cannot be undone.')) return;
-  fbDB.ref('feedback').remove().then(() => {
-    loadFeedbackInbox();
-  });
+  const choice = prompt(
+    'ADMIN: Clear feedback.\n\n' +
+    'Type one of:\n' +
+    '  ALL — delete everything\n' +
+    '  bug — delete all bug reports\n' +
+    '  idea — delete all ideas\n' +
+    '  feedback — delete all general feedback\n' +
+    '  compliment — delete all compliments\n' +
+    '  other — delete all other\n' +
+    '  old — delete everything older than 7 days\n\n' +
+    'Type your choice:'
+  );
+  if (!choice) return;
+  const c = choice.trim().toLowerCase();
+  if (!confirm('Are you SURE you want to clear "' + c + '"?')) return;
+
+  if (c === 'all') {
+    fbDB.ref('feedback').remove().then(() => { loadFeedbackInbox(); });
+  } else if (['bug','idea','feedback','compliment','other'].includes(c)) {
+    // Delete by category
+    fbDB.ref('feedback').once('value').then(snap => {
+      const data = snap.val() || {};
+      const deletes = [];
+      Object.entries(data).forEach(([key, val]) => {
+        if (val.type === c) deletes.push(key);
+      });
+      deletes.forEach(key => fbDB.ref('feedback/' + key).remove());
+      setTimeout(() => loadFeedbackInbox(), 500);
+      alert('Deleted ' + deletes.length + ' ' + c + ' entries.');
+    });
+  } else if (c === 'old') {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    fbDB.ref('feedback').once('value').then(snap => {
+      const data = snap.val() || {};
+      const deletes = [];
+      Object.entries(data).forEach(([key, val]) => {
+        if ((val.timestamp || 0) < weekAgo) deletes.push(key);
+      });
+      deletes.forEach(key => fbDB.ref('feedback/' + key).remove());
+      setTimeout(() => loadFeedbackInbox(), 500);
+      alert('Deleted ' + deletes.length + ' entries older than 7 days.');
+    });
+  } else {
+    alert('Invalid choice.');
+  }
 });
 
 let inboxPage = 0;
