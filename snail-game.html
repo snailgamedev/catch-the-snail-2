@@ -2514,7 +2514,14 @@ document.getElementById('awards-btn').addEventListener('click', () => {
   paused = true;
 });
 document.getElementById('awards-close').addEventListener('click', () => {
-  document.getElementById('awards-panel').style.display = 'none';
+  const panel = document.getElementById('awards-panel');
+  const fromMenu = panel.dataset.fromMenu === '1';
+  panel.style.display = 'none';
+  delete panel.dataset.fromMenu;
+  if (fromMenu) {
+    document.getElementById('main-menu').style.display = 'flex';
+    return;
+  }
   if (document.getElementById('main-menu').style.display !== 'none') return;
   document.body.classList.remove('in-menu');
   if (document.getElementById('win-screen').style.display !== 'flex') {
@@ -6011,9 +6018,11 @@ document.getElementById('new-verse-btn').addEventListener('click', () => { SFX.u
 document.getElementById('fun-fact').addEventListener('click', () => { SFX.uiClick(); showRandomFact(); });
 document.getElementById('menu-awards-btn').addEventListener('click', () => {
   SFX.uiClick();
+  document.getElementById('main-menu').style.display = 'none';
   document.getElementById('awards-btn').classList.remove('has-new');
   renderAwardsPanel();
   document.getElementById('awards-panel').style.display = 'flex';
+  document.getElementById('awards-panel').dataset.fromMenu = '1';
   document.body.classList.add('in-menu');
 });
 
