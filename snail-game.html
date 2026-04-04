@@ -782,6 +782,7 @@
     <div style="display:flex;gap:6px;margin-top:15px;flex-wrap:wrap;justify-content:center;">
       <button id="lb-reset" class="menu-btn" style="background:rgba(136,34,34,0.5);color:#ff8888;padding:6px 14px;font-size:clamp(9px,2vw,11px);border-radius:6px;">RESET SCORES</button>
       <button id="lb-admin-clear" class="menu-btn" style="background:rgba(68,0,0,0.5);color:#ff4444;padding:6px 14px;font-size:clamp(9px,2vw,11px);border-radius:6px;display:none;">ADMIN CLEAR</button>
+      <button id="lb-admin-crown" class="menu-btn" style="background:rgba(255,215,0,0.2);color:#ffd700;padding:6px 14px;font-size:clamp(9px,2vw,11px);border-radius:6px;display:none;">&#x1F451; CROWN</button>
     </div>
   </div>
 </div>
@@ -959,7 +960,7 @@
     <span id="diff-meter"><span id="diff-fill" style="width:10%;background:#44cc44"></span></span>
   </div>
 </div>
-<button id="awards-btn">AWARDS (0/207)</button>
+<button id="awards-btn">AWARDS (0/209)</button>
 <div id="award-popup">
   <div class="popup-icon" id="popup-icon"></div>
   <div class="popup-title">AWARD UNLOCKED!</div>
@@ -2055,6 +2056,10 @@ const awardDefs = [
   { id: 'garry_ultra',      icon: '\u{1F31F}', name: 'ULTRA Garry Slayer',    desc: 'Defeat ULTRA Garry (Wave 500)',   condition: 'garry', type: 'ultra' },
   { id: 'garry_nohit',      icon: '\u{1F48E}', name: 'Flawless Victory',      desc: 'Beat Garry without getting football-moved', condition: 'garry', type: 'nohit' },
   // ===== SPECIAL =====
+  // ===== CROWN =====
+  { id: 'crown_received',   icon: '\u{1F451}', name: 'Crowned Royalty',       desc: 'Get crowned by a dev on the leaderboard', condition: 'crowned' },
+  { id: 'crown_week',       icon: '\u{1F48E}', name: 'Week of the Crown',     desc: 'Hold a crown for 7+ days',               condition: 'crownWeek' },
+  // ===== SPECIAL =====
   { id: 'all_awards',      icon: '\u{1F3C6}', name: 'Completionist',         desc: 'Unlock every other award',       condition: 'allAwards' },
 ];
 
@@ -2230,7 +2235,9 @@ function checkAllAwards(gradeStr, gradeScore) {
       case 'reset': earned = awardsState.hasReset === true; break;
       case 'perfectWave1': earned = awardsState.highestWave >= 1 && (awardsState.cleanWaves || 0) >= 1; break;
       case 'allRarities': earned = awardsState.raritiesCaught.size >= 8; break;
-      case 'garry': earned = false; break; // garry awards checked directly via checkAward
+      case 'garry': earned = false; break;
+      case 'crowned': earned = false; break;
+      case 'crownWeek': earned = false; break;
       case 'allAwards': earned = awardsState.unlocked.size >= awardDefs.length - 1; break;
     }
     if (earned) checkAward(def.id);
@@ -2264,6 +2271,7 @@ function renderAwardsPanel() {
     { title: 'PLAYTIME', filter: d => d.condition === 'playtime' },
     { title: 'MISC', filter: d => d.condition === 'reset' },
     { title: 'BOSS FIGHT', filter: d => d.condition === 'garry' },
+    { title: 'CROWNS', filter: d => d.condition === 'crowned' || d.condition === 'crownWeek' },
     { title: 'LEADERBOARD PLACEMENTS', filter: d => d.condition === 'lb' || d.condition === 'lbMulti' || d.condition === 'lbMulti5' },
     { title: 'SPECIAL', filter: d => d.id === 'all_awards' || d.id === 'all_rarities' },
   ];
@@ -7060,21 +7068,49 @@ function renderLeaderboard(board, period, mode) {
     const tieIcon = '\u{1F91D}';
     let myPlace = -1;
 
-    entries.forEach((e, i) => {
-      const isMe = e.uid === myUid;
-      if (isMe) myPlace = i;
-      const isTied = i > 0 && entries[i-1].value === e.value;
-      let val = e.value;
-      if (currentLBTab === 'timePlayed') val = `${Math.floor(e.value / 60)}m ${Math.floor(e.value % 60)}s`;
-      const icon = isTied ? tieIcon : (i < 5 ? placeIcons[i] : `#${i+1}`);
-      const row = document.createElement('div');
-      row.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin:3px 0;border-radius:6px;font-size:clamp(12px,3vw,14px);${isMe ? 'background:rgba(255,215,0,0.15);border:1px solid #ffd700;' : i < 3 ? 'background:rgba(255,255,255,0.06);' : 'background:rgba(255,255,255,0.03);'}`;
-      row.innerHTML = `<span style="color:${isMe ? '#ffd700' : '#aaa'};">${icon} ${e.gamertag}</span><span style="color:${isMe ? '#ffd700' : '#fff'};font-weight:bold;">${val}</span>`;
-      list.appendChild(row);
-    });
+    // Fetch crowned players
+    const crownRef = fbDB ? fbDB.ref('crowns') : null;
+    const renderEntries = (crowns) => {
+      entries.forEach((e, i) => {
+        const isMe = e.uid === myUid;
+        if (isMe) myPlace = i;
+        const isTied = i > 0 && entries[i-1].value === e.value;
+        let val = e.value;
+        if (currentLBTab === 'timePlayed') val = Math.floor(e.value / 60) + 'm ' + Math.floor(e.value % 60) + 's';
+        const icon = isTied ? tieIcon : (i < 5 ? placeIcons[i] : '#' + (i+1));
+        // Check if this player is crowned
+        const crownData = crowns[e.gamertag];
+        const hasCrown = crownData && crownData.active && (!crownData.expires || crownData.expires > Date.now());
+        const crownIcon = hasCrown ? ' \u{1F451}' : '';
+        const crownGlow = hasCrown ? 'box-shadow:0 0 8px rgba(255,215,0,0.3);' : '';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin:3px 0;border-radius:6px;font-size:clamp(12px,3vw,14px);' + (isMe ? 'background:rgba(255,215,0,0.15);border:1px solid #ffd700;' : hasCrown ? 'background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.2);' : i < 3 ? 'background:rgba(255,255,255,0.06);' : 'background:rgba(255,255,255,0.03);') + crownGlow;
+        row.innerHTML = '<span style="color:' + (isMe ? '#ffd700' : hasCrown ? '#ffd700' : '#aaa') + ';">' + icon + ' ' + e.gamertag + crownIcon + '</span><span style="color:' + (isMe ? '#ffd700' : '#fff') + ';font-weight:bold;">' + val + '</span>';
+        if (hasCrown && crownData.reason) {
+          row.title = 'Crowned: ' + crownData.reason;
+        }
+        list.appendChild(row);
+      });
+      if (myPlace >= 0) checkLeaderboardAwards(myPlace, currentLBTab, currentLBMode, currentLBPeriod);
+    };
 
-    // Check leaderboard awards for current player
-    if (myPlace >= 0) checkLeaderboardAwards(myPlace, currentLBTab, currentLBMode, currentLBPeriod);
+    if (crownRef) {
+      crownRef.once('value', snap => {
+        const crowns = snap.val() || {};
+        renderEntries(crowns);
+        // Check if current user is crowned — award
+        const myTag = getGamertag();
+        const myCrown = crowns[myTag];
+        if (myCrown && myCrown.active && (!myCrown.expires || myCrown.expires > Date.now())) {
+          checkAward('crown_received');
+          if (myCrown.crownedAt && Date.now() - myCrown.crownedAt > 7 * 24 * 60 * 60 * 1000) {
+            checkAward('crown_week');
+          }
+        }
+      });
+    } else {
+      renderEntries({});
+    }
   });
 }
 
@@ -7169,11 +7205,81 @@ document.getElementById('lb-admin-clear').addEventListener('click', () => {
   }
 });
 
+// ============ CROWN SYSTEM ============
+document.getElementById('lb-admin-crown').addEventListener('click', () => {
+  SFX.uiClick();
+  if (!isDevUser() || !fbDB) return;
+  const gamertag = prompt(
+    '\u{1F451} CROWN A PLAYER\n\n' +
+    'Type the exact gamertag of the player to crown.\n' +
+    'They\'ll get a golden crown next to their name on leaderboards!\n\n' +
+    'Type REMOVE to remove a crown.\n' +
+    'Type LIST to see all crowned players.\n\n' +
+    'Gamertag:'
+  );
+  if (!gamertag) return;
+  const g = gamertag.trim();
+
+  if (g.toUpperCase() === 'LIST') {
+    fbDB.ref('crowns').once('value', snap => {
+      const data = snap.val() || {};
+      const list = Object.entries(data).filter(([,v]) => v.active && (!v.expires || v.expires > Date.now()));
+      if (list.length === 0) { alert('No crowned players.'); return; }
+      alert('Crowned players:\n\n' + list.map(([tag, v]) => {
+        const exp = v.expires ? new Date(v.expires).toLocaleDateString() : 'forever';
+        return '\u{1F451} ' + tag + ' (until ' + exp + ') — ' + (v.reason || 'no reason');
+      }).join('\n'));
+    });
+    return;
+  }
+
+  if (g.toUpperCase() === 'REMOVE') {
+    const removeTag = prompt('Gamertag to remove crown from:');
+    if (!removeTag) return;
+    fbDB.ref('crowns/' + removeTag.trim()).remove();
+    alert('Crown removed from ' + removeTag.trim());
+    renderLeaderboard();
+    return;
+  }
+
+  const duration = prompt(
+    'How long should the crown last?\n\n' +
+    '  1d = 1 day\n' +
+    '  7d = 1 week\n' +
+    '  30d = 1 month\n' +
+    '  forever = permanent\n\n' +
+    'Duration:'
+  );
+  if (!duration) return;
+
+  let expires = 0;
+  if (duration === 'forever') { expires = 0; }
+  else {
+    const days = parseInt(duration);
+    if (isNaN(days) || days <= 0) { alert('Invalid duration.'); return; }
+    expires = Date.now() + days * 24 * 60 * 60 * 1000;
+  }
+
+  const reason = prompt('Reason for crowning (optional):') || '';
+
+  fbDB.ref('crowns/' + g).set({
+    active: true,
+    crownedBy: getGamertag(),
+    crownedAt: Date.now(),
+    expires: expires || null,
+    reason: reason,
+  });
+
+  alert('\u{1F451} ' + g + ' has been crowned!' + (expires ? ' Until ' + new Date(expires).toLocaleDateString() : ' Forever!'));
+  renderLeaderboard();
+});
+
 document.getElementById('menu-leaderboard-btn').addEventListener('click', () => {
   SFX.uiClick();
   showMenuScreen('menu-leaderboard-screen');
   startMusic('leaderboard');
   document.getElementById('lb-admin-clear').style.display = isDevUser() ? 'block' : 'none';
+  document.getElementById('lb-admin-crown').style.display = isDevUser() ? 'block' : 'none';
   renderLeaderboard('totalCaught', 'alltime');
 });
 
