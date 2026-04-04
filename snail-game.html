@@ -5275,36 +5275,70 @@ function startMusic(type) {
     }
 
     else if (type === 'about') {
-      // ABOUT PAGE: Peaceful, warm, reflective — this page has the gospel, keep it respectful
+      // ABOUT PAGE: Soulful, emotional, fire — gospel deserves the best track
+      // Layers: warm pad chorus, soul piano melody, deep bass, gentle kick, shimmering high
       const pad1 = ctx.createOscillator(); pad1.type = 'sine';
-      const pad2 = ctx.createOscillator(); pad2.type = 'sine'; pad2.detune.value = 5;
-      const padG = ctx.createGain(); padG.gain.value = 0.15;
-      pad1.connect(padG); pad2.connect(padG); padG.connect(master);
-      const high = ctx.createOscillator(); high.type = 'sine';
-      const highG = ctx.createGain(); highG.gain.value = 0;
-      high.connect(highG); highG.connect(master);
-      const sub = ctx.createOscillator(); sub.type = 'sine';
-      const subG = ctx.createGain(); subG.gain.value = 0.2;
-      sub.connect(subG); subG.connect(master);
-      // C major — peaceful, hopeful, warm
-      const chords = [262,294,330,349,392,349,330,294];
-      const highs = [523,587,659,698,784,698,659,587];
-      const bass = [131,131,147,147,165,165,147,147];
+      const pad2 = ctx.createOscillator(); pad2.type = 'sine'; pad2.detune.value = 8;
+      const pad3 = ctx.createOscillator(); pad3.type = 'triangle'; pad3.detune.value = -5;
+      const padG = ctx.createGain(); padG.gain.value = 0.1;
+      const padF = ctx.createBiquadFilter(); padF.type = 'lowpass'; padF.frequency.value = 900;
+      pad1.connect(padF); pad2.connect(padF); pad3.connect(padF); padF.connect(padG); padG.connect(master);
+      // Soul melody — triangle for that warm piano feel
+      const mel = ctx.createOscillator(); mel.type = 'triangle';
+      const melG = ctx.createGain(); melG.gain.value = 0;
+      mel.connect(melG); melG.connect(master);
+      // Shimmer — high sine with delay feel
+      const shim = ctx.createOscillator(); shim.type = 'sine';
+      const shimG = ctx.createGain(); shimG.gain.value = 0;
+      const shimDelay = ctx.createDelay(); shimDelay.delayTime.value = 0.4;
+      const shimDelayG = ctx.createGain(); shimDelayG.gain.value = 0.2;
+      shim.connect(shimG); shimG.connect(master); shimG.connect(shimDelay); shimDelay.connect(shimDelayG); shimDelayG.connect(master);
+      // Deep bass
+      const bass = ctx.createOscillator(); bass.type = 'sine';
+      const bassG = ctx.createGain(); bassG.gain.value = 0.25;
+      bass.connect(bassG); bassG.connect(master);
+      // Gentle heartbeat kick
+      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 50;
+      const kickG = ctx.createGain(); kickG.gain.value = 0;
+      kick.connect(kickG); kickG.connect(master);
+      // Ab major — soulful, uplifting, emotional (gospel key)
+      const chords = [208,233,262,277,311,330,311,277,262,233,208,196,208,233,262,311];
+      const melody = [523,587,622,698,784,830,784,698,622,587,523,494,523,587,622,698];
+      const shimNotes = [1047,1175,1245,1397,1568,1397,1245,1175,1047,988,1047,1175,1245,1397,1568,1661];
+      const bassN = [104,104,116,116,131,131,116,116,104,104,98,98,104,104,116,116];
       let step = 0;
-      pad1.frequency.value = chords[0]; pad2.frequency.value = chords[0]; high.frequency.value = highs[0]; sub.frequency.value = bass[0];
-      pad1.start(now); pad2.start(now); high.start(now); sub.start(now);
-      musicNodes = [pad1, pad2, high, sub, master, padG, highG, subG];
+      pad1.frequency.value = chords[0]; pad2.frequency.value = chords[0]; pad3.frequency.value = chords[0];
+      mel.frequency.value = melody[0]; shim.frequency.value = shimNotes[0]; bass.frequency.value = bassN[0];
+      pad1.start(now); pad2.start(now); pad3.start(now); mel.start(now); shim.start(now); bass.start(now); kick.start(now);
+      musicNodes = [pad1, pad2, pad3, mel, shim, bass, kick, master, padG, melG, shimG, bassG, kickG, padF, shimDelay, shimDelayG];
       musicTimers.push(setInterval(() => { try {
         step = (step+1) % chords.length;
         const t = ctx.currentTime;
-        pad1.frequency.linearRampToValueAtTime(chords[step], t + 3);
-        pad2.frequency.linearRampToValueAtTime(chords[step], t + 3.5);
-        sub.frequency.linearRampToValueAtTime(bass[step], t + 2);
-        high.frequency.setValueAtTime(highs[step], t);
-        // Gentle sparkle on the high note
-        highG.gain.setValueAtTime(0.06, t);
-        highG.gain.linearRampToValueAtTime(0, t + 2);
-      } catch(e) {} }, 3000));
+        // Smooth chord glide
+        pad1.frequency.linearRampToValueAtTime(chords[step], t + 2);
+        pad2.frequency.linearRampToValueAtTime(chords[step], t + 2.3);
+        pad3.frequency.linearRampToValueAtTime(chords[step] * 0.5, t + 2.5);
+        bass.frequency.linearRampToValueAtTime(bassN[step], t + 1.5);
+        // Melody — plucky soul piano
+        mel.frequency.setValueAtTime(melody[step], t);
+        melG.gain.setValueAtTime(0.1, t);
+        melG.gain.linearRampToValueAtTime(0.02, t + 1);
+        // Shimmer — high sparkle with echo
+        if (step % 2 === 0) {
+          shim.frequency.setValueAtTime(shimNotes[step], t);
+          shimG.gain.setValueAtTime(0.04, t);
+          shimG.gain.linearRampToValueAtTime(0, t + 1.5);
+        }
+        // Heartbeat kick every 4th beat
+        if (step % 4 === 0) {
+          kickG.gain.setValueAtTime(0.12, t);
+          kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+          kick.frequency.setValueAtTime(60, t);
+          kick.frequency.exponentialRampToValueAtTime(30, t + 0.15);
+        }
+        // Filter breathes — opens on high notes
+        padF.frequency.linearRampToValueAtTime(600 + melody[step] * 0.5, t + 1);
+      } catch(e) {} }, 1200));
     }
 
     else if (type === 'boss') {
@@ -5481,20 +5515,20 @@ function stopMusic() {
   musicTimers.forEach(t => clearInterval(t));
   musicTimers = [];
   if (window._musicInterval) { clearInterval(window._musicInterval); window._musicInterval = null; }
-  // Smooth fade out over 1 second instead of hard stop
+  // Smooth fade out — find the master gain (first GainNode in the list)
   const nodesToStop = [...musicNodes];
-  const masterNode = nodesToStop.find(n => n.gain && n.gain.value !== undefined);
-  if (masterNode && masterNode.gain) {
-    try {
-      const ctx = ensureAudio();
-      masterNode.gain.linearRampToValueAtTime(0, ctx.currentTime + 1);
-      setTimeout(() => {
-        nodesToStop.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
-      }, 1100);
-    } catch(e) {
+  try {
+    const ctx = ensureAudio();
+    const t = ctx.currentTime;
+    // Fade ALL gain nodes to 0
+    nodesToStop.forEach(n => {
+      try { if (n.gain && typeof n.gain.linearRampToValueAtTime === 'function') n.gain.linearRampToValueAtTime(0, t + 0.8); } catch(e) {}
+    });
+    // Stop oscillators after fade completes
+    setTimeout(() => {
       nodesToStop.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
-    }
-  } else {
+    }, 900);
+  } catch(e) {
     nodesToStop.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
   }
   musicNodes = [];
