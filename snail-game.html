@@ -821,9 +821,14 @@
     <button id="settings-reset" style="padding:12px 30px;font-size:16px;font-weight:bold;background:#ff4444;color:#fff;border:none;border-radius:8px;cursor:pointer;">RESET TO DEFAULT</button>
     <button id="settings-mainmenu" style="padding:12px 30px;font-size:16px;font-weight:bold;background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer;display:none;">MAIN MENU</button>
   </div>
-  <div style="display:flex;gap:10px;margin-top:15px;flex-wrap:wrap;justify-content:center;">
-    <button class="menu-btn" id="settings-export" style="background:#44cc44;color:#1a1a2e;padding:8px 20px;font-size:13px;">EXPORT PROGRESS</button>
-    <button class="menu-btn" id="settings-import" style="background:#ffaa00;color:#1a1a2e;padding:8px 20px;font-size:13px;">IMPORT PROGRESS</button>
+  <div style="margin-top:20px;padding-top:15px;border-top:1px solid #333;width:100%;max-width:400px;">
+    <div style="color:#ffd700;font-size:14px;font-weight:bold;text-align:center;margin-bottom:10px;">BACKUP & RESTORE</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="menu-btn" id="settings-export" style="background:#44cc44;color:#1a1a2e;padding:12px 25px;font-size:15px;font-weight:bold;">SAVE BACKUP</button>
+      <button class="menu-btn" id="settings-import" style="background:#ffaa00;color:#1a1a2e;padding:12px 25px;font-size:15px;font-weight:bold;">LOAD BACKUP</button>
+    </div>
+    <div style="color:#666;font-size:11px;text-align:center;margin-top:6px;">Save your progress to a file or restore from one</div>
+    <div id="backup-status" style="color:#888;font-size:12px;text-align:center;margin-top:6px;min-height:16px;"></div>
   </div>
   <input type="file" id="import-file" accept=".json" style="display:none;">
   <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;justify-content:center;">
@@ -5128,53 +5133,87 @@ function isDevUser() {
   return DEV_GAMERTAGS.includes(tag);
 }
 
-// ============ EXPORT / IMPORT PROGRESS ============
+// ============ BACKUP & RESTORE (brand new) ============
 document.getElementById('settings-export').addEventListener('click', () => {
   SFX.uiClick();
-  // Gather ALL localStorage data for current profile
-  const exportData = { _exportVersion: 2, _exportDate: new Date().toISOString(), _profile: currentProfile };
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key) exportData[key] = localStorage.getItem(key);
+  const statusEl = document.getElementById('backup-status');
+  try {
+    const backup = {};
+    backup._version = 3;
+    backup._date = new Date().toISOString();
+    backup._gamertag = getGamertag();
+    backup._keys = [];
+    // Save every single localStorage key
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) {
+        backup[k] = localStorage.getItem(k);
+        backup._keys.push(k);
+      }
+    }
+    const json = JSON.stringify(backup);
+    const blob = new Blob([json], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'snailgame-backup-' + (getGamertag() || 'player') + '.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+    statusEl.textContent = 'Backup saved!';
+    statusEl.style.color = '#44cc44';
+  } catch(e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = '#ff4444';
   }
-  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `snailgame-backup-${getGamertag() || 'unknown'}-${Date.now()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  alert('Progress exported! Keep this file safe.');
 });
 
 document.getElementById('settings-import').addEventListener('click', () => {
   SFX.uiClick();
+  document.getElementById('import-file').value = '';
   document.getElementById('import-file').click();
 });
 
-document.getElementById('import-file').addEventListener('change', (e) => {
-  const file = e.target.files[0];
+document.getElementById('import-file').addEventListener('change', function() {
+  const file = this.files[0];
+  const statusEl = document.getElementById('backup-status');
   if (!file) return;
+  statusEl.textContent = 'Reading file...';
+  statusEl.style.color = '#ffaa00';
   const reader = new FileReader();
-  reader.onload = (ev) => {
+  reader.onload = function(e) {
     try {
-      const data = JSON.parse(ev.target.result);
-      if (!data._exportVersion) { alert('Invalid backup file.'); return; }
-      if (!confirm('Import this backup? This will REPLACE all current progress.')) return;
-      // Write all keys to localStorage
-      Object.entries(data).forEach(([key, val]) => {
-        if (!key.startsWith('_export') && !key.startsWith('_profile')) {
-          localStorage.setItem(key, val);
+      const backup = JSON.parse(e.target.result);
+      if (!backup._version) {
+        statusEl.textContent = 'Not a valid backup file!';
+        statusEl.style.color = '#ff4444';
+        return;
+      }
+      if (!confirm('Load this backup? Your current progress will be replaced with:\n\nGamertag: ' + (backup._gamertag || 'unknown') + '\nSaved: ' + (backup._date || 'unknown') + '\nKeys: ' + (backup._keys?.length || '?'))) return;
+      // Clear current data
+      localStorage.clear();
+      // Write backup data
+      let count = 0;
+      Object.entries(backup).forEach(function(entry) {
+        const k = entry[0], v = entry[1];
+        if (k.charAt(0) !== '_') {
+          localStorage.setItem(k, v);
+          count++;
         }
       });
-      alert('Progress imported! Reloading...');
-      location.reload();
+      statusEl.textContent = 'Restored ' + count + ' items! Reloading...';
+      statusEl.style.color = '#44cc44';
+      setTimeout(function() { location.reload(); }, 1500);
     } catch(err) {
-      alert('Failed to read file: ' + err.message);
+      statusEl.textContent = 'Failed: ' + err.message;
+      statusEl.style.color = '#ff4444';
     }
   };
+  reader.onerror = function() {
+    statusEl.textContent = 'Could not read file!';
+    statusEl.style.color = '#ff4444';
+  };
   reader.readAsText(file);
-  e.target.value = ''; // reset so same file can be imported again
 });
 
 // Open feedback form
