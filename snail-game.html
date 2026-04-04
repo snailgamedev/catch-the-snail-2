@@ -2349,8 +2349,8 @@ function loadAwards() {
     };
   } catch { return { unlocked: new Set(), totalCaught: 0, totalFootball: 0, raritiesCaught: new Set(), archetypesCaught: new Set(), gradesSeen: new Set(), movesEaten: {}, highestWave: 0, highestDiff: 0, diffCatches: [], fastestWave: Infinity, cleanWaves: 0, rarityCatchCounts: [0,0,0,0,0,0,0,0], totalPlaytime: 0, hasReset: false, largestWaveCleared: 0, maxFootballInWave: 0, totalAttemptsPersist: 0, totalNearMisses: 0 }; }
 }
-function saveAwards() {
-  localStorage.setItem(profileKey('awards'), JSON.stringify({
+function getAwardsData() {
+  return {
     unlocked: [...awardsState.unlocked],
     totalCaught: awardsState.totalCaught,
     totalFootball: awardsState.totalFootball,
@@ -2371,8 +2371,77 @@ function saveAwards() {
     maxFootballInWave: awardsState.maxFootballInWave || 0,
     totalAttemptsPersist: awardsState.totalAttemptsPersist || 0,
     totalNearMisses: awardsState.totalNearMisses || 0,
-  }));
+  };
 }
+function saveAwards() {
+  const data = getAwardsData();
+  localStorage.setItem(profileKey('awards'), JSON.stringify(data));
+  // Sync to Firebase for permanent cloud save
+  if (fbDB && fbUser && getGamertag()) {
+    fbDB.ref('awards/' + fbUser.uid).set({ gamertag: getGamertag(), data, updated: Date.now() });
+  }
+}
+// Restore awards from Firebase cloud save — merges with local, keeps the better data
+function restoreAwardsFromCloud() {
+  if (!fbDB || !fbUser) return;
+  fbDB.ref('awards/' + fbUser.uid).once('value', snap => {
+    if (!snap.exists()) return;
+    const cloud = snap.val().data;
+    if (!cloud) return;
+    const local = awardsState;
+    // Merge: take max of numeric values, union of sets/arrays
+    let changed = false;
+    const cloudUnlocked = new Set(cloud.unlocked || []);
+    for (const id of cloudUnlocked) {
+      if (!local.unlocked.has(id)) { local.unlocked.add(id); changed = true; }
+    }
+    if ((cloud.totalCaught || 0) > local.totalCaught) { local.totalCaught = cloud.totalCaught; changed = true; }
+    if ((cloud.totalFootball || 0) > local.totalFootball) { local.totalFootball = cloud.totalFootball; changed = true; }
+    for (const r of (cloud.raritiesCaught || [])) { if (!local.raritiesCaught.has(r)) { local.raritiesCaught.add(r); changed = true; } }
+    for (const a of (cloud.archetypesCaught || [])) {
+      if (!local.archetypesCaught) local.archetypesCaught = new Set();
+      if (!local.archetypesCaught.has(a)) { local.archetypesCaught.add(a); changed = true; }
+    }
+    for (const g of (cloud.gradesSeen || [])) {
+      if (!local.gradesSeen) local.gradesSeen = new Set();
+      if (!local.gradesSeen.has(g)) { local.gradesSeen.add(g); changed = true; }
+    }
+    if (cloud.movesEaten) {
+      for (const [m, c] of Object.entries(cloud.movesEaten)) {
+        if ((c || 0) > (local.movesEaten[m] || 0)) { local.movesEaten[m] = c; changed = true; }
+      }
+    }
+    if ((cloud.highestWave || 0) > local.highestWave) { local.highestWave = cloud.highestWave; changed = true; }
+    if ((cloud.highestDiff || 0) > local.highestDiff) { local.highestDiff = cloud.highestDiff; changed = true; }
+    if (cloud.diffCatches) {
+      for (const dc of cloud.diffCatches) {
+        if (!local.diffCatches.some(l => l.rarity === dc.rarity && l.diff === dc.diff)) {
+          local.diffCatches.push(dc); changed = true;
+        }
+      }
+    }
+    const cf = cloud.fastestWave === null || cloud.fastestWave === undefined ? Infinity : cloud.fastestWave;
+    if (cf < (local.fastestWave || Infinity)) { local.fastestWave = cf; changed = true; }
+    if ((cloud.cleanWaves || 0) > (local.cleanWaves || 0)) { local.cleanWaves = cloud.cleanWaves; changed = true; }
+    if (cloud.rarityCatchCounts) {
+      for (let i = 0; i < 8; i++) {
+        if ((cloud.rarityCatchCounts[i] || 0) > (local.rarityCatchCounts[i] || 0)) {
+          local.rarityCatchCounts[i] = cloud.rarityCatchCounts[i]; changed = true;
+        }
+      }
+    }
+    if ((cloud.totalPlaytime || 0) > (local.totalPlaytime || 0)) { local.totalPlaytime = cloud.totalPlaytime; changed = true; }
+    if ((cloud.largestWaveCleared || 0) > (local.largestWaveCleared || 0)) { local.largestWaveCleared = cloud.largestWaveCleared; changed = true; }
+    if ((cloud.maxFootballInWave || 0) > (local.maxFootballInWave || 0)) { local.maxFootballInWave = cloud.maxFootballInWave; changed = true; }
+    if ((cloud.totalAttemptsPersist || 0) > (local.totalAttemptsPersist || 0)) { local.totalAttemptsPersist = cloud.totalAttemptsPersist; changed = true; }
+    if ((cloud.totalNearMisses || 0) > (local.totalNearMisses || 0)) { local.totalNearMisses = cloud.totalNearMisses; changed = true; }
+    if (changed) {
+      saveAwards(); // save merged data back to both local + cloud
+      console.log('Awards restored from cloud and merged');
+    }
+  });
+}
+
 function saveDifficulty() {
   localStorage.setItem(profileKey('difficulty'), difficulty);
 }
@@ -7221,6 +7290,8 @@ function renderProfileSlots() {
       btn.addEventListener('click', () => {
         currentProfile = i;
         document.getElementById('gamertag-modal').style.display = 'none';
+        awardsState = loadAwards();
+        restoreAwardsFromCloud();
         showMainMenu();
       });
     } else {
@@ -7284,6 +7355,8 @@ document.getElementById('gamertag-save').addEventListener('click', () => {
       setGamertag(input);
       document.getElementById('gamertag-modal').style.display = 'none';
       updateGamertagDisplay();
+      awardsState = loadAwards();
+      restoreAwardsFromCloud();
       showMainMenu();
     });
   } else {
@@ -8001,6 +8074,8 @@ const _filledProfiles = _startProfiles.filter(p => p);
 if (_filledProfiles.length === 1) {
   currentProfile = _startProfiles.indexOf(_filledProfiles[0]);
   loadSettings();
+  awardsState = loadAwards();
+  restoreAwardsFromCloud();
   showMainMenu();
 } else if (_filledProfiles.length === 0) {
   showGamertagModal();
