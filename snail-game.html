@@ -4458,7 +4458,7 @@ function startMultiplayerGame(lobbyData) {
   document.getElementById('main-menu').style.display = 'none';
   document.getElementById('ui').style.display = 'none';
   document.body.classList.remove('in-menu');
-  startMusic('gameplay');
+  startMusic('mpgame');
   gameStarted = true;
   paused = false;
 
@@ -5316,6 +5316,53 @@ function startMusic(type) {
       } catch(e) {} }, 180));
     }
 
+    else if (type === 'mpgame') {
+      // MULTIPLAYER GAMEPLAY: High energy party — funky, bouncy, everyone's hyped
+      const lead = ctx.createOscillator(); lead.type = 'square';
+      const leadG = ctx.createGain(); leadG.gain.value = 0.07;
+      const leadF = ctx.createBiquadFilter(); leadF.type = 'lowpass'; leadF.frequency.value = 2200;
+      lead.connect(leadF); leadF.connect(leadG); leadG.connect(master);
+      const bass = ctx.createOscillator(); bass.type = 'sine';
+      const bassG = ctx.createGain(); bassG.gain.value = 0.35;
+      bass.connect(bassG); bassG.connect(master);
+      const funk = ctx.createOscillator(); funk.type = 'triangle';
+      const funkG = ctx.createGain(); funkG.gain.value = 0;
+      funk.connect(funkG); funkG.connect(master);
+      const kick = ctx.createOscillator(); kick.type = 'sine'; kick.frequency.value = 55;
+      const kickG = ctx.createGain(); kickG.gain.value = 0;
+      kick.connect(kickG); kickG.connect(master);
+      const hat = ctx.createOscillator(); hat.type = 'sawtooth'; hat.frequency.value = 3000;
+      const hatG = ctx.createGain(); hatG.gain.value = 0;
+      const hatF = ctx.createBiquadFilter(); hatF.type = 'highpass'; hatF.frequency.value = 2000;
+      hat.connect(hatF); hatF.connect(hatG); hatG.connect(master);
+      // G major funky — bouncy party energy
+      const mel = [392,440,494,523,587,659,587,523,494,440,392,349,330,349,392,440,494,587,659,784,659,587,523,494];
+      const basN = [98,98,110,110,123,123,110,110,98,98,87,87,82,82,98,98,110,110,123,123,110,110,98,98];
+      const funkN = [784,880,988,1047,1175,1047,988,880];
+      let step = 0;
+      lead.frequency.value = mel[0]; bass.frequency.value = basN[0]; funk.frequency.value = funkN[0];
+      lead.start(now); bass.start(now); funk.start(now); kick.start(now); hat.start(now);
+      musicNodes = [lead, bass, funk, kick, hat, master, leadG, bassG, funkG, kickG, hatG, leadF, hatF];
+      musicTimers.push(setInterval(() => { try {
+        step = (step+1) % mel.length;
+        const t = ctx.currentTime;
+        lead.frequency.setValueAtTime(mel[step], t);
+        bass.frequency.setValueAtTime(basN[step], t);
+        funk.frequency.setValueAtTime(funkN[step % funkN.length], t);
+        // Plucky lead
+        leadG.gain.setValueAtTime(0.1, t);
+        leadG.gain.linearRampToValueAtTime(0.04, t + 0.1);
+        // Funky stab every 3rd beat
+        if (step % 3 === 0) { funkG.gain.setValueAtTime(0.06, t); funkG.gain.exponentialRampToValueAtTime(0.001, t + 0.08); }
+        // Four on the floor kick
+        if (step % 2 === 0) { kickG.gain.setValueAtTime(0.25, t); kickG.gain.exponentialRampToValueAtTime(0.001, t + 0.12); kick.frequency.setValueAtTime(80, t); kick.frequency.exponentialRampToValueAtTime(35, t + 0.08); }
+        // Offbeat hi-hat
+        if (step % 2 === 1) { hatG.gain.setValueAtTime(0.03, t); hatG.gain.exponentialRampToValueAtTime(0.001, t + 0.04); }
+        // Filter envelope — opens up on high notes
+        leadF.frequency.setValueAtTime(1500 + mel[step] * 2, t);
+      } catch(e) {} }, 170));
+    }
+
     else {
       // LOBBY: Chill but building — lo-fi with a groove, head-nodding beat
       const pad1 = ctx.createOscillator(); pad1.type = 'sine';
@@ -5364,7 +5411,22 @@ function stopMusic() {
   musicTimers.forEach(t => clearInterval(t));
   musicTimers = [];
   if (window._musicInterval) { clearInterval(window._musicInterval); window._musicInterval = null; }
-  musicNodes.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
+  // Smooth fade out over 1 second instead of hard stop
+  const nodesToStop = [...musicNodes];
+  const masterNode = nodesToStop.find(n => n.gain && n.gain.value !== undefined);
+  if (masterNode && masterNode.gain) {
+    try {
+      const ctx = ensureAudio();
+      masterNode.gain.linearRampToValueAtTime(0, ctx.currentTime + 1);
+      setTimeout(() => {
+        nodesToStop.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
+      }, 1100);
+    } catch(e) {
+      nodesToStop.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
+    }
+  } else {
+    nodesToStop.forEach(n => { try { if (n.stop) n.stop(); } catch(e) {} });
+  }
   musicNodes = [];
   musicPlaying = false;
   currentMusicType = '';
