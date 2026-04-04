@@ -655,6 +655,11 @@
         <div style="margin-bottom:6px;">&#x1F451; <span style="color:#ffd700;">Boss fight</span> at wave 50 & 500 — Garry the Snail awaits</div>
       </div>
     </details>
+    <!-- Fun fact -->
+    <div id="fun-fact" style="max-width:350px;width:100%;background:rgba(255,215,0,0.05);border:1px solid rgba(255,215,0,0.1);border-radius:8px;padding:10px 14px;margin-bottom:10px;text-align:center;cursor:pointer;" title="Click for another fact">
+      <div style="color:#ffd700;font-size:10px;font-weight:bold;letter-spacing:1px;">DID YOU KNOW?</div>
+      <div id="fun-fact-text" style="color:#ccc;font-size:clamp(11px,2.5vw,13px);margin-top:4px;line-height:1.4;"></div>
+    </div>
     <!-- Bottom buttons -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
       <button class="menu-btn" id="menu-about" style="background:rgba(255,255,255,0.06);color:#ffd700;font-size:clamp(11px,2.5vw,13px);padding:8px 16px;">&#x2728; What Is This?</button>
@@ -767,6 +772,7 @@
       <button class="menu-btn lb-tab" data-board="timePlayed" style="background:#333;color:#fff;padding:6px 10px;font-size:clamp(9px,2vw,11px);border-radius:6px;">&#x23F1; TIME</button>
       <button class="menu-btn lb-tab" data-board="movesEaten" style="background:#333;color:#fff;padding:6px 10px;font-size:clamp(9px,2vw,11px);border-radius:6px;">&#x1F3C8; MOVED ON</button>
       <button class="menu-btn lb-tab" data-board="cleanWaves" style="background:#333;color:#fff;padding:6px 10px;font-size:clamp(9px,2vw,11px);border-radius:6px;">&#x2728; CLEAN</button>
+      <button class="menu-btn lb-tab" data-board="bestGrade" style="background:#333;color:#fff;padding:6px 10px;font-size:clamp(9px,2vw,11px);border-radius:6px;">&#x1F4DD; GRADES</button>
     </div>
     <!-- Period tabs — minimal -->
     <div style="display:flex;gap:4px;margin-bottom:12px;justify-content:center;">
@@ -1041,11 +1047,11 @@ function getTimePeriodKey(period) {
   return 'alltime';
 }
 
-function updateLeaderboard(gamertag, totalCaught, totalPlaytime, totalMoves, cleanWaves, mode) {
+function updateLeaderboard(gamertag, totalCaught, totalPlaytime, totalMoves, cleanWaves, mode, bestGradeScore) {
   if (!fbUser) return;
   const uid = fbUser.uid;
   const ts = Date.now();
-  const boards = { totalCaught, timePlayed: Math.floor(totalPlaytime), movesEaten: totalMoves, cleanWaves };
+  const boards = { totalCaught, timePlayed: Math.floor(totalPlaytime), movesEaten: totalMoves, cleanWaves, bestGrade: bestGradeScore || 0 };
   // Write to mode-specific (sp_ or mp_) AND global
   const prefixes = mode === 'mp' ? ['', 'mp_'] : ['', 'sp_'];
   const periods = ['alltime','daily','weekly','monthly'];
@@ -1151,6 +1157,109 @@ function pickQuote(arr, category) {
   return arr[idx];
 }
 
+// ============ FUN FACTS (100+) ============
+const funFacts = [
+"The rarest snails are Celestial — only Ninja, Warper, and Predictor hold that rank",
+"Garry the Snail appears at wave 50 with 5 HP and again at wave 500 with 10 HP",
+"There are exactly 1,520 unique snails in the game, each with a unique name",
+"The Trickster snail looks slow on purpose — it's baiting you in before it BURSTS away",
+"Ghost snails phase invisible every 2 seconds. You literally can't catch what you can't see",
+"The Tank snail has the smallest hitbox in the game but also the slowest speed",
+"There are 15 football and basketball moves. The rarest is SUPLEXED at 3%",
+"The TAUNTED move is the ultimate disrespect — the snail stops and dances on you",
+"On IMPOSSIBLE difficulty, snails have a 40% chance of football-moving you instead of getting caught",
+"The Teleporter snail warps to a random spot when you get within 80 pixels",
+"Your crosshair size in settings actually changes how easy it is to catch snails",
+"The Predictor snail knows where your cursor is GOING and moves there first",
+"The Faker snail pretends to be caught, freezes, then ESCAPES after 1.5 seconds",
+"The Mirror snail copies your exact cursor movement — you go left, it goes left",
+"The Gravity snail pulls other snails toward it, disrupting your strategy",
+"There are 209 awards in the game. Good luck getting them all",
+"The music changes on every screen — menu, leaderboard, lobby, gameplay, boss, and the gospel page",
+"The CPU Catcher has 8 difficulty levels from SLEEPY to TERMINATOR",
+"On PEACEFUL difficulty, there's only a 3% chance of getting football-moved",
+"The Juker snail changes direction so randomly that even IT doesn't know where it's going",
+"The Orbiter circles your cursor at a fixed distance — always close, never catchable",
+"The Dasher sits perfectly still... then EXPLODES in a random direction at insane speed",
+"The Charger picks a random direction and goes FULL SPEED. Then picks another. Then another.",
+"The Glitcher micro-teleports constantly — it's like trying to catch static",
+"The Splitter leaves afterimage decoys. Which one is the real snail?",
+"The Decoy spawns fake copies of itself. Only one is catchable",
+"The Clingy snail follows other snails around for safety in numbers",
+"The Panicker is calm until you get close — then it FREAKS OUT in random directions",
+"The Spiral snail moves in expanding spiral patterns. Mesmerizing and infuriating",
+"The Bouncer bounces off walls like a DVD screensaver logo. Surprisingly fast",
+"The Dancer moves in figure-8 patterns. Graceful. Annoying.",
+"The Coward always runs to the farthest corner from your cursor",
+"The Ninja is invisible while moving and only visible when stopped",
+"The Warper goes off one edge of the screen and appears on the opposite side",
+"The Phaser alternates between super fast and super slow every 2 seconds",
+"The Circler moves in tight circles — try catching THAT",
+"The Baiter moves TOWARD you then curves away at the last moment",
+"The Flasher teleport-dashes in short bursts. Blink and it's gone",
+"The Reverse snail runs TOWARD your cursor then dodges at the last second",
+"The Sleeper barely moves... until you get close. Then it WAKES UP at max speed",
+"The Liner only moves in perfectly straight lines. Predictable but fast",
+"Common snails are Runner, Drunk, Magnet, Sleeper, and Liner",
+"Legendary snails are Trickster, Reverse, Shadow, Flasher, and Mirror",
+"Mythic snails are Teleporter, Ghost, Splitter, and Faker",
+"Exotic snails are Dasher, Glitcher, and Decoy",
+"The game was built from scratch in one massive coding session",
+"Every football move has 26 unique snail quotes",
+"The grading system goes from S+ (basically impossible) to Z (new grade invented for you)",
+"There are 24 different letter grades, each with 12-21 unique roasts",
+"The difficulty randomly shifts between waves — you might go from PEACEFUL to IMPOSSIBLE",
+"There's a 8% chance of the difficulty wildly swinging 2-3 levels in a random direction",
+"The mercy system kicks in after 1000 attempts — snails slow down out of pity",
+"Multiplayer CPU snails use the EXACT same AI code as singleplayer snails",
+"The HITSTICKED move has the biggest screen shake at 50 pixels",
+"The TAUNTED move has NO screen shake — that's the disrespect",
+"Each rarity tier has its own glow effect. Celestial snails pulse with a double ring",
+"The game has 7 unique music tracks, each a completely different genre",
+"The boss fight music uses actual waveshaper distortion for power chords",
+"The gospel page music is in Ab major — the soulful gospel key",
+"The menu music is dark trap with 808 bass slides",
+"Fun facts are randomized — you'll see a different one every time",
+"Your progress can be exported as a JSON file and imported on any device",
+"The feedback system has categories: Bug, Idea, Feedback, Compliment, and Other",
+"Dev admins can crown players on the leaderboard with a duration",
+"Crowned players get a golden 👑 emoji and glow effect on leaderboards",
+"The crosshair catch radius includes the ENTIRE crosshair circle, not just the center",
+"The anti-cheat system auto-reports players who move 3x faster than their max speed",
+"The Pendulum snail swings back and forth like a clock. Rhythmic and tricky",
+"There are 160+ Bible verses on the gospel page, randomized each visit",
+"The about page has John 3:16 and a 'Another Verse' button for more",
+"The leaderboard has 4 boards × 3 modes × 4 time periods = 48 different views",
+"You can earn awards for reaching #1, top 3, top 5, top 10, top 25, and top 50",
+"The 'Full Highlight Reel' award requires getting hit by ALL 15 moves",
+"The 'Gotta Catch Em All' award requires catching all 38 snail archetypes",
+"The speed award 'Time Traveler' requires clearing a wave in under 1 second",
+"Wave awards go all the way up to wave 10,000",
+"The game works offline for singleplayer — no internet needed",
+"The service worker uses network-first caching so you always get the latest version",
+"The Garry boss fight music has double bass kicks on EVERY step",
+"Garry gets 15% faster with every hit. By the last hit he's terrifying",
+"Garry teleports to a random spot after each hit so you can't camp",
+"ULTRA Garry at wave 500 has 10 HP and 8 minion snails",
+"The Garry boss switches between ALL archetype behaviors every 3 seconds",
+"There are 3 profile slots per device — share your game with family",
+"Gamertags are globally unique — no two players can have the same name",
+"The lobby supports up to 10 players with CPU fill for empty slots",
+"In multiplayer, snail players can't see the catcher's cursor",
+"Sport moves trigger automatically for snail players when the catcher gets close",
+"The head start gives snails 5 seconds to scatter before the catcher is released",
+"The catcher gets a BLACK SCREEN during the head start — can't see where snails went",
+"The 'Flawless Victory' award requires beating Garry without getting football-moved once",
+"The Shadow snail follows your cursor from behind — always in your blind spot",
+"Real snails move at 0.03 mph. Your cursor moves way faster. And you STILL lose.",
+"The game title is 'Catch The Snail' but the snails catch YOU with football moves",
+"Every screen transition uses a butter-smooth crossfade with 1.5s fade out and 2.5s fade in",
+];
+
+function showRandomFact() {
+  document.getElementById('fun-fact-text').textContent = funFacts[Math.floor(Math.random() * funFacts.length)];
+}
+
 // Resume audio on ANY user interaction — covers all browsers
 ['click','mousedown','mousemove','touchstart','keydown'].forEach(evt => {
   document.addEventListener(evt, () => ensureAudio(), { once: false, passive: true });
@@ -1195,6 +1304,38 @@ const taunts = [
   "i'm not running. i'm power walking.","do you need a tutorial?","even your reflection is disappointed",
   "the snail just updated its linkedin: 'uncatchable'","bro is down horrendous",
   "that miss was sponsored by skill issue incorporated","the snail is taking a coffee break mid-dodge",
+  "your cursor has stage fright","the snail just went live on instagram","bro forgot how to mouse",
+  "that miss will haunt you at 3am","the snail union is negotiating better dodging benefits",
+  "you couldn't catch a bus","the snail is writing a book about this: 'How I Dodged My Way to Fame'",
+  "error 404: aim not found","your reflexes called in sick today","that was the worst attempt in snail history",
+  "the snail is speed. you are not.","congrats you just set the record for most misses",
+  "the snails are live-tweeting your performance","your mouse needs therapy after that",
+  "the snail just filed for a trademark on that dodge","skill check: failed","you lost to evolution's slowest creature",
+  "the snail is now accepting apology letters","your cursor is having an identity crisis",
+  "the snails organized a parade in honor of your failure","that was almost impressive. almost.",
+  "the snail just won the lottery of not being caught","your cursor is lost. mentally.",
+  "the snail council voted you 'least likely to succeed'","bruh you're making the CPU look good",
+  "that miss was so bad the game considered crashing","the snail just uploaded that clip to youtube",
+  "your cursor has commitment issues","the snail is writing you a sympathy card",
+  "you need to calibrate your everything","the snails are starting a support group for you",
+  "your aim is abstract art — nobody understands it","that miss deserves its own award",
+  "the snail just achieved inner peace watching you fail","skill gap: immeasurable",
+  "the snails are considering a restraining order against your cursor","you play like you're underwater in molasses",
+  "congratulations: you've been outplayed by something without legs","that miss was cinematic",
+  "the snail is considering a career in boxing after dodging you","you couldn't catch a PARKED snail",
+  "your cursor is filing for unemployment","the snails want royalties for this entertainment",
+  "that was the snail equivalent of a mic drop","your mouse DPI needs a DPI",
+  "the snails started a podcast about your gameplay","you're trending on snail twitter and not in a good way",
+  "somewhere a pro player just felt a disturbance in the force","the snail has entered the matrix",
+  "your cursor is the definition of 'close but no cigar'","the snails are framing this replay",
+  "that dodge was generational talent from the snail","bro you're playing a different game",
+  "the snail just did your taxes while dodging you","uninstall your mouse driver and try again",
+  "the snails held a moment of silence for your skills","your cursor needs an exorcism",
+  "that miss was so clean it sparkled","the snail is charging appearance fees now",
+  "you've been demoted from catcher to spectator in everyone's minds","that dodge was NASTY",
+  "the snail just updated its dating profile: 'uncatchable, verified'","you play like lag incarnate",
+  "that attempt was a cry for help","the snails are building a statue of that dodge",
+  "your cursor moves like it's paying rent by the hour","legendary miss. truly legendary.",
 ];
 
 const mercyTaunts = [
@@ -3509,7 +3650,7 @@ function winWave() {
   adjustDifficulty(grade.letter, attempts / wave);
 
   // Update leaderboard
-  updateLeaderboard(getGamertag(), awardsState.totalCaught, awardsState.totalPlaytime || 0, awardsState.totalFootball || 0, awardsState.cleanWaves || 0, 'sp');
+  updateLeaderboard(getGamertag(), awardsState.totalCaught, awardsState.totalPlaytime || 0, awardsState.totalFootball || 0, awardsState.cleanWaves || 0, 'sp', gs);
 
 
   document.getElementById('win-stats').textContent =
@@ -5802,6 +5943,8 @@ function showRandomVerse() {
 
 document.getElementById('new-verse-btn').addEventListener('click', () => { SFX.uiClick(); showRandomVerse(); });
 
+document.getElementById('fun-fact').addEventListener('click', () => { SFX.uiClick(); showRandomFact(); });
+
 document.getElementById('menu-about').addEventListener('click', () => {
   SFX.uiClick();
   document.getElementById('about-screen').style.display = 'flex';
@@ -6665,6 +6808,7 @@ function showMainMenu() {
   document.getElementById('main-menu').style.display = 'flex';
   document.body.classList.add('in-menu');
   updateGamertagDisplay();
+  showRandomFact();
   paused = true;
   startMusic('menu');
   // Connection status
@@ -7077,6 +7221,7 @@ function renderLeaderboard(board, period, mode) {
         const isTied = i > 0 && entries[i-1].value === e.value;
         let val = e.value;
         if (currentLBTab === 'timePlayed') val = Math.floor(e.value / 60) + 'm ' + Math.floor(e.value % 60) + 's';
+        if (currentLBTab === 'bestGrade') { const gradeNames = {10:'S+',9:'S',8:'S-',7:'A+',6:'A',5:'A-',4:'B+',3:'B',2:'B-',1:'C+',0:'C','-1':'C-','-2':'D+','-3':'D','-4':'D-','-5':'E+','-6':'E','-7':'E-','-8':'F+','-9':'F','-10':'F-','-11':'F--','-12':'G','-13':'Z'}; val = gradeNames[String(e.value)] || 'C'; }
         const icon = isTied ? tieIcon : (i < 5 ? placeIcons[i] : '#' + (i+1));
         // Check if this player is crowned
         const crownData = crowns[e.gamertag];
