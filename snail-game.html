@@ -2078,7 +2078,7 @@ function updateDifficultyDisplay() {
 }
 
 function adjustDifficulty(gradeStr, attemptsPerSnail) {
-  const maxDiff = diffLevels.length - 1;
+  const maxDiff = diffLevels.length - 2; // -2 to exclude BOSS BATTLE (auto-only)
   const gradeScores = {
     'S+':10,'S':9,'S-':8,'A+':7,'A':6,'A-':5,'B+':4,'B':3,'B-':2,
     'C+':1,'C':0,'C-':-1,'D+': -2,'D':-3,'D-':-4,'E+':-5,'E':-6,'E-':-7,
@@ -2566,12 +2566,15 @@ function getAwardsData() {
     totalNearMisses: awardsState.totalNearMisses || 0,
   };
 }
+let _lastCloudSave = 0;
 function saveAwards() {
   const data = getAwardsData();
   localStorage.setItem(profileKey('awards'), JSON.stringify(data));
-  // Sync to Firebase for permanent cloud save
-  if (fbDB && fbUser && getGamertag()) {
-    fbDB.ref('awards/' + fbUser.uid).set({ gamertag: getGamertag(), data, updated: Date.now() });
+  // Throttled Firebase sync — max once per 5 seconds to prevent write spam
+  const now = Date.now();
+  if (fbDB && fbUser && getGamertag() && now - _lastCloudSave > 5000) {
+    _lastCloudSave = now;
+    fbDB.ref('awards/' + fbUser.uid).set({ gamertag: getGamertag(), data, updated: now });
   }
 }
 // Restore awards from Firebase cloud save — merges with local, keeps the better data
@@ -2747,7 +2750,7 @@ function checkAllAwards(gradeStr, gradeScore) {
       case 'rarityCount': {
         const counts = awardsState.rarityCatchCounts || [0,0,0,0,0,0,0,0,0];
         let sum = 0;
-        for (let r = def.minRarity; r < 8; r++) sum += (counts[r] || 0);
+        for (let r = def.minRarity; r < counts.length; r++) sum += (counts[r] || 0);
         earned = sum >= def.count;
         break;
       }
@@ -2900,7 +2903,7 @@ function pickSnailsForWave(count) {
 
   for (let i = 0; i < count; i++) {
     // Apply difficulty boost to rarity weights
-    const weights = rarities.map((r, idx) => Math.max(1, r.spawnWeight + boost[idx]));
+    const weights = rarities.map((r, idx) => r.spawnWeight === 0 ? 0 : Math.max(1, r.spawnWeight + (boost[idx] || 0)));
     const totalWeight = weights.reduce((s, w) => s + w, 0);
     let roll = Math.random() * totalWeight;
     let chosenRarity = 0;
@@ -4519,7 +4522,7 @@ function catchSnail(s) {
     spawnConfetti(s.x, s.y);
     SFX.footballHit();
     checkAward('garry_hit');
-    s.baseSpeed *= 1.15;
+    s.baseSpeed = Math.min(s.baseSpeed * 1.15, 20);
     s.x = 30 + Math.random() * (canvas.width - 60);
     s.y = 30 + Math.random() * (canvas.height - 60);
     showTaunt(garryTaunts);
@@ -4533,7 +4536,7 @@ function catchSnail(s) {
     SFX.footballHit();
     checkAward('donner_hit');
     // Donner gets 20% faster each hit — more aggressive than dad
-    s.baseSpeed *= 1.20;
+    s.baseSpeed = Math.min(s.baseSpeed * 1.20, 20);
     // Donner does a double teleport when hit
     s.x = 30 + Math.random() * (canvas.width - 60);
     s.y = 30 + Math.random() * (canvas.height - 60);
@@ -4547,7 +4550,7 @@ function catchSnail(s) {
     spawnConfetti(s.x, s.y);
     SFX.footballHit();
     checkAward('chosen_hit');
-    s.baseSpeed *= 1.18;
+    s.baseSpeed = Math.min(s.baseSpeed * 1.18, 20);
     s.x = 30 + Math.random() * (canvas.width - 60);
     s.y = 30 + Math.random() * (canvas.height - 60);
     showTaunt(chosenTaunts);
@@ -4598,6 +4601,7 @@ function catchSnail(s) {
   // Track rarity + difficulty combo
   if (!awardsState.diffCatches) awardsState.diffCatches = [];
   awardsState.diffCatches.push({ rarity: s.rarityIdx || 0, diff: difficulty });
+  if (awardsState.diffCatches.length > 200) awardsState.diffCatches = awardsState.diffCatches.slice(-100); // cap to prevent bloat
   saveAwards();
   checkAllAwards('', 0);
 
@@ -6289,6 +6293,9 @@ function updateSnail(snail) {
 
   snail.x += Math.cos(snail.angle) * speed;
   snail.y += Math.sin(snail.angle) * speed;
+
+  // Safety: fix NaN positions
+  if (isNaN(snail.x) || isNaN(snail.y)) { snail.x = canvas.width / 2; snail.y = canvas.height / 2; snail.angle = Math.random() * Math.PI * 2; }
 
   clampSnail(snail);
   addTrail(snail);
@@ -8491,36 +8498,42 @@ function updateDevButtons() {
 }
 
 function gameLoop() {
-  time++;
-  if (!gameStarted) { requestAnimationFrame(gameLoop); return; }
-  if (mpMode) { mpGameTick(); requestAnimationFrame(gameLoop); return; }
+  try {
+    time++;
+    if (!gameStarted) { requestAnimationFrame(gameLoop); return; }
+    if (mpMode) { mpGameTick(); requestAnimationFrame(gameLoop); return; }
 
-  // Handle cutscene timer
-  if (cutsceneActive) {
-    cutsceneTimer--;
-    if (cutsceneTimer <= 0) {
-      endCutscene();
+    // Handle cutscene timer
+    if (cutsceneActive) {
+      cutsceneTimer--;
+      if (cutsceneTimer <= 0) endCutscene();
     }
-  }
 
-  if (!paused) {
+    if (!paused) {
+      for (let s of snails) {
+        if (s.alive && !cutsceneActive) {
+          try {
+            if (s.isGarry) updateGarry(s);
+            else if (s.isDonner) updateDonner(s);
+            else if (s.isChosen) updateChosen(s);
+            else updateSnail(s);
+          } catch(e) { console.warn('Snail update error:', s.type, e); }
+        }
+      }
+      checkHoverCatch();
+    }
+    drawBackground();
     for (let s of snails) {
-      if (s.alive && !cutsceneActive) {
-        if (s.isGarry) updateGarry(s);
-        else if (s.isDonner) updateDonner(s);
-        else if (s.isChosen) updateChosen(s);
-        else updateSnail(s);
+      if (s.alive) {
+        try {
+          if (s.isGarry) drawGarry(s); else if (s.isDonner) drawDonner(s); else if (s.isChosen) drawChosen(s); else drawSnailAt(s);
+        } catch(e) { console.warn('Snail draw error:', s.type, e); }
       }
     }
-    checkHoverCatch();
-  }
-  drawBackground();
-  for (let s of snails) {
-    if (s.alive) { if (s.isGarry) drawGarry(s); else if (s.isDonner) drawDonner(s); else if (s.isChosen) drawChosen(s); else drawSnailAt(s); }
-  }
-  drawCutsceneEffects();
-  drawCursor();
-  updateConfetti();
+    drawCutsceneEffects();
+    drawCursor();
+    updateConfetti();
+  } catch(e) { console.error('Game loop error:', e); }
   requestAnimationFrame(gameLoop);
 }
 
