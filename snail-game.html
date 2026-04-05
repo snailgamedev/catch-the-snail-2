@@ -8498,42 +8498,36 @@ function updateDevButtons() {
 }
 
 function gameLoop() {
-  try {
-    time++;
-    if (!gameStarted) { requestAnimationFrame(gameLoop); return; }
-    if (mpMode) { mpGameTick(); requestAnimationFrame(gameLoop); return; }
+  time++;
+  if (!gameStarted) { requestAnimationFrame(gameLoop); return; }
+  if (mpMode) { mpGameTick(); requestAnimationFrame(gameLoop); return; }
 
-    // Handle cutscene timer
-    if (cutsceneActive) {
-      cutsceneTimer--;
-      if (cutsceneTimer <= 0) endCutscene();
+  // Handle cutscene timer
+  if (cutsceneActive) {
+    cutsceneTimer--;
+    if (cutsceneTimer <= 0) {
+      endCutscene();
     }
+  }
 
-    if (!paused) {
-      for (let s of snails) {
-        if (s.alive && !cutsceneActive) {
-          try {
-            if (s.isGarry) updateGarry(s);
-            else if (s.isDonner) updateDonner(s);
-            else if (s.isChosen) updateChosen(s);
-            else updateSnail(s);
-          } catch(e) { console.warn('Snail update error:', s.type, e); }
-        }
-      }
-      checkHoverCatch();
-    }
-    drawBackground();
+  if (!paused) {
     for (let s of snails) {
-      if (s.alive) {
-        try {
-          if (s.isGarry) drawGarry(s); else if (s.isDonner) drawDonner(s); else if (s.isChosen) drawChosen(s); else drawSnailAt(s);
-        } catch(e) { console.warn('Snail draw error:', s.type, e); }
+      if (s.alive && !cutsceneActive) {
+        if (s.isGarry) updateGarry(s);
+        else if (s.isDonner) updateDonner(s);
+        else if (s.isChosen) updateChosen(s);
+        else updateSnail(s);
       }
     }
-    drawCutsceneEffects();
-    drawCursor();
-    updateConfetti();
-  } catch(e) { console.error('Game loop error:', e); }
+    checkHoverCatch();
+  }
+  drawBackground();
+  for (let s of snails) {
+    if (s.alive) { if (s.isGarry) drawGarry(s); else if (s.isDonner) drawDonner(s); else if (s.isChosen) drawChosen(s); else drawSnailAt(s); }
+  }
+  drawCutsceneEffects();
+  drawCursor();
+  updateConfetti();
   requestAnimationFrame(gameLoop);
 }
 
