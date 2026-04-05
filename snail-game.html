@@ -4087,7 +4087,7 @@ function triggerFootballCutscene(snail) {
 
   // Show cutscene
   cutsceneActive = true;
-  cutsceneTimer = style.duration;
+  cutsceneTimer = (style && style.duration) || 90;
   footballMovesHit++;
   awardsState.totalFootball++;
   if (!awardsState.movesEaten) awardsState.movesEaten = {};
@@ -8504,6 +8504,7 @@ function gameLoop() {
 
   // Handle cutscene timer
   if (cutsceneActive) {
+    if (typeof cutsceneTimer !== 'number' || isNaN(cutsceneTimer)) cutsceneTimer = 1; // safety
     cutsceneTimer--;
     if (cutsceneTimer <= 0) {
       endCutscene();
