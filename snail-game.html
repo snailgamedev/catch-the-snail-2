@@ -4561,9 +4561,8 @@ function catchSnail(s) {
   if (s.isGarry) {
     garryActive = false; garryHP = 0;
     checkAward('garry_defeated');
-    if (s.isUltraGarry) checkAward('garry_ultra');
+    if (s.isUltraGarry) { checkAward('garry_ultra'); checkAward('all_bosses'); }
     if (footballMovesHit === 0) checkAward('garry_nohit');
-    checkAward('all_bosses');
     if (!donnerActive && !chosenActive) { startMusic('gameplay'); difficulty = window._preBossDifficulty || 0; updateDifficultyDisplay(); }
   }
   if (s.isDonner) {
@@ -4571,7 +4570,6 @@ function catchSnail(s) {
     checkAward('donner_defeated');
     if (s.isUltraDonner) checkAward('donner_ultra');
     if (footballMovesHit === 0) checkAward('donner_nohit');
-    checkAward('all_bosses');
     if (!garryActive && !chosenActive) { startMusic('gameplay'); difficulty = window._preBossDifficulty || 0; updateDifficultyDisplay(); }
   }
   if (s.isChosen) {
@@ -4579,7 +4577,6 @@ function catchSnail(s) {
     checkAward('chosen_defeated');
     if (s.isUltraChosen) checkAward('chosen_ultra');
     if (footballMovesHit === 0) checkAward('chosen_nohit');
-    checkAward('all_bosses');
     if (!garryActive && !donnerActive) { startMusic('gameplay'); difficulty = window._preBossDifficulty || 0; updateDifficultyDisplay(); }
   }
   snailsCaught++;
