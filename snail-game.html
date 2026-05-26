@@ -8852,15 +8852,17 @@ document.getElementById('gamertag-save').addEventListener('click', () => {
     document.getElementById('gamertag-error').textContent = 'That name is already taken on this device';
     return;
   }
-  // Check if name taken globally via Firebase
+  // Check if name taken globally via Firebase.
+  // RECLAIM-FRIENDLY (so anyone who switched devices / cleared their browser can get their name back):
+  // a name owned by another device no longer hard-blocks — you can reclaim it with an intentional confirm.
   if (fbDB) {
     document.getElementById('gamertag-error').textContent = 'Checking availability...';
     fbDB.ref(`gamertags/${input}`).once('value', snap => {
       if (snap.exists() && snap.val().uid !== fbUser?.uid) {
-        document.getElementById('gamertag-error').textContent = 'That gamertag is already taken by someone else!';
-        return;
+        const ok = confirm('"' + input + '" is already claimed on another device.\n\nIf this is YOUR name (you switched devices or cleared your browser), tap OK to reclaim it. Your old scores stay on the leaderboard; new progress saves to this device.');
+        if (!ok) { document.getElementById('gamertag-error').textContent = 'Pick another name, or reclaim it if it’s yours.'; return; }
       }
-      // Available — claim it
+      // Available (or reclaimed) — claim it to this device
       currentProfile = pendingProfileSlot;
       setGamertag(input);
       document.getElementById('gamertag-modal').style.display = 'none';
